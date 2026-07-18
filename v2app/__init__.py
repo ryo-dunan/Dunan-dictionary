@@ -2,7 +2,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 
 from .db import close_db
 from .security import apply_security_headers, csrf_protect
@@ -49,6 +49,16 @@ def create_app(test_config=None):
     app.register_blueprint(media_bp)
     app.register_blueprint(public_bp)
     app.teardown_appcontext(close_db)
+
+    @app.before_request
+    def database_update_maintenance():
+        marker = Path(app.config["BACKUP_ROOT"]) / ".database-update-in-progress"
+        if marker.exists() and request.endpoint != "admin_v2.apply_database_update":
+            return render_template(
+                "v2/error.html",
+                message="辞書データを安全に更新しています。数秒後に画面を読み直してください。",
+            ), 503
+
     app.before_request(csrf_protect)
     app.after_request(apply_security_headers)
 
@@ -67,6 +77,13 @@ def create_app(test_config=None):
     @app.errorhandler(500)
     def server_error(_error):
         return render_template("v2/error.html", message="処理を完了できませんでした。時間をおいてもう一度お試しください。"), 500
+
+    @app.errorhandler(413)
+    def upload_too_large(_error):
+        return render_template(
+            "v2/error.html",
+            message="ファイルが大きすぎます。16MB以下のDBファイルを選んでください。",
+        ), 413
 
     @app.get("/healthz")
     def healthz():

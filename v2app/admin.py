@@ -1,16 +1,21 @@
-import hashlib
 import json
 import secrets
-import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from .allocation import distribute_assignments
 from .auth import role_required
-from .db import get_db
+from .database_update import (
+    DatabaseUpdateError,
+    create_backup,
+    inspect_database,
+    pending_path,
+    replace_database,
+    save_pending_upload,
+)
+from .db import close_db, get_db
 from .security import csrf_token
 from .workflow import ALLOWED_POS
 from .search import rebuild_search_index
@@ -128,18 +133,133 @@ def publication(entry_id, action):
 @bp.post("/backup")
 @role_required("admin")
 def backup():
-    source = Path(current_app.config["DATABASE"])
-    folder = Path(current_app.config["BACKUP_ROOT"])
-    folder.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = folder / f"yonaguni-v2-{stamp}-{secrets.token_hex(3)}.db"
-    shutil.copy2(source, target)
-    digest = hashlib.sha256(target.read_bytes()).hexdigest()
-    db = get_db(); integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
+    result = create_backup(
+        current_app.config["DATABASE"],
+        current_app.config["BACKUP_ROOT"],
+        session["user_id"],
+    )
+    db = get_db()
     db.execute("INSERT INTO backup_runs(actor_id,filename,sha256,size_bytes,integrity_result) VALUES(?,?,?,?,?)",
-               (session["user_id"], target.name, digest, target.stat().st_size, integrity)); db.commit()
-    flash(f"検証済みバックアップを作成しました：{target.name}")
+               (session["user_id"], result["filename"], result["sha256"], result["size_bytes"], result["integrity"])); db.commit()
+    flash(f"検証済みバックアップを作成しました：{result['filename']}")
     return redirect(url_for("admin_v2.index"))
+
+
+@bp.route("/database-update", methods=("GET", "POST"))
+@role_required("admin")
+def database_update():
+    preview = None
+    live_summary = None
+    token = session.get("database_update_token")
+    if request.method == "POST":
+        upload = request.files.get("database_file")
+        filename = Path(upload.filename or "").name if upload else ""
+        if not upload or not filename:
+            flash("更新に使うDBファイルを選んでください。")
+            return redirect(url_for("admin_v2.database_update"))
+        if Path(filename).suffix.lower() not in (".db", ".sqlite", ".sqlite3"):
+            flash("拡張子が .db、.sqlite、.sqlite3 のファイルを選んでください。")
+            return redirect(url_for("admin_v2.database_update"))
+        old_token = session.pop("database_update_token", None)
+        if old_token:
+            try:
+                pending_path(current_app.config["BACKUP_ROOT"], old_token).unlink(missing_ok=True)
+            except DatabaseUpdateError:
+                pass
+        try:
+            token, _path, preview = save_pending_upload(
+                upload, current_app.config["BACKUP_ROOT"]
+            )
+            session["database_update_token"] = token
+            session["database_update_filename"] = filename[:120]
+            session["database_update_sha256"] = preview["sha256"]
+            flash("DBを安全に読み取りました。件数を確認してから更新を実行してください。")
+            return redirect(url_for("admin_v2.database_update"))
+        except DatabaseUpdateError as error:
+            flash(str(error))
+            return redirect(url_for("admin_v2.database_update"))
+    if token:
+        try:
+            preview = inspect_database(
+                pending_path(current_app.config["BACKUP_ROOT"], token)
+            )
+            live_summary = inspect_database(current_app.config["DATABASE"])
+        except DatabaseUpdateError as error:
+            session.pop("database_update_token", None)
+            session.pop("database_update_filename", None)
+            session.pop("database_update_sha256", None)
+            flash(str(error))
+    return render_template(
+        "v2/database_update.html",
+        preview=preview,
+        live=live_summary,
+        filename=session.get("database_update_filename"),
+        token=token,
+        csrf_token=csrf_token(),
+    )
+
+
+@bp.post("/database-update/cancel")
+@role_required("admin")
+def cancel_database_update():
+    token = session.pop("database_update_token", None)
+    session.pop("database_update_filename", None)
+    session.pop("database_update_sha256", None)
+    if token:
+        try:
+            pending_path(current_app.config["BACKUP_ROOT"], token).unlink(missing_ok=True)
+        except DatabaseUpdateError:
+            pass
+    flash("DB更新を取り消しました。現在の辞書データは変更されていません。")
+    return redirect(url_for("admin_v2.database_update"))
+
+
+@bp.post("/database-update/apply")
+@role_required("admin")
+def apply_database_update():
+    token = request.form.get("token", "")
+    expected_token = session.get("database_update_token", "")
+    if not expected_token or not secrets.compare_digest(token, expected_token):
+        flash("確認情報の有効期限が切れました。DBファイルを選び直してください。")
+        return redirect(url_for("admin_v2.database_update"))
+    if request.form.get("confirm") != "yes":
+        flash("注意事項を確認し、確認欄にチェックを入れてください。")
+        return redirect(url_for("admin_v2.database_update"))
+    db = get_db()
+    current_user = db.execute(
+        """SELECT id,username,display_name,password_hash FROM users
+           WHERE id=? AND role='admin' AND is_active=1""",
+        (session["user_id"],),
+    ).fetchone()
+    if not current_user or not check_password_hash(
+        current_user["password_hash"], request.form.get("password", "")
+    ):
+        flash("現在の完全管理者パスワードが正しくありません。")
+        return redirect(url_for("admin_v2.database_update"))
+    current_admin = dict(current_user)
+    try:
+        uploaded = pending_path(current_app.config["BACKUP_ROOT"], token)
+        close_db()
+        result = replace_database(
+            current_app.config["DATABASE"],
+            current_app.config["BACKUP_ROOT"],
+            uploaded,
+            current_admin,
+            session.get("database_update_sha256", ""),
+        )
+        session["user_id"] = result["actor_id"]
+        session.pop("database_update_token", None)
+        session.pop("database_update_filename", None)
+        session.pop("database_update_sha256", None)
+        flash(
+            f"DBを更新しました。更新前のデータは {result['backup']['filename']} に保存されています。"
+        )
+        return redirect(url_for("admin_v2.index"))
+    except DatabaseUpdateError as error:
+        flash(str(error))
+    except Exception:
+        flash("DB更新を完了できませんでした。現在のDBは維持または自動復元されています。")
+    return redirect(url_for("admin_v2.database_update"))
 
 
 @bp.get("/history")

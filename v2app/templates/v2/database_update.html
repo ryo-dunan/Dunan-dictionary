@@ -1,0 +1,53 @@
+{% extends "v2/base.html" %}{% block content %}
+<header class="topbar glass"><div><p class="eyebrow">完全管理者・DB管理</p><h1>DBファイルから辞書を更新</h1></div><a class="quiet link-button" href="{{ url_for('admin_v2.index') }}">運用管理へ戻る</a></header>
+{% for message in get_flashed_messages() %}<div class="notice page-notice" role="alert">{{ message }}</div>{% endfor %}
+
+<section class="form-card glass database-upload-card">
+  <p class="eyebrow">STEP 1</p><h2>更新するDBを選択</h2>
+  <p class="help">選択しただけでは更新されません。先にファイル形式、データの関連、破損の有無を検査し、現在のDBとの件数比較を表示します。</p>
+  <form method="post" enctype="multipart/form-data" class="database-file-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>SQLite DBファイル
+      <input type="file" name="database_file" accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3" required>
+    </label>
+    <small>使用できる形式：.db / .sqlite / .sqlite3、最大16MB</small>
+    <button class="primary">ファイルを検査</button>
+  </form>
+</section>
+
+{% if preview %}
+<section class="list-card glass database-preview">
+  <div class="database-step-heading"><div><p class="eyebrow">STEP 2</p><h2>検査結果を確認</h2></div><span class="database-safe-badge">整合性検査 OK</span></div>
+  <p><strong>{{ filename }}</strong></p>
+  <div class="database-comparison" role="region" aria-label="現在と更新後のDB件数比較">
+    <table class="simple-table">
+      <thead><tr><th>内容</th><th>現在</th><th>更新後</th></tr></thead>
+      <tbody>
+        <tr><th>見出し語</th><td>{{ live.entries }}</td><td>{{ preview.entries }}</td></tr>
+        <tr><th>意味</th><td>{{ live.meanings }}</td><td>{{ preview.meanings }}</td></tr>
+        <tr><th>例文</th><td>{{ live.examples }}</td><td>{{ preview.examples }}</td></tr>
+        <tr><th>公開語彙</th><td>{{ live.published }}</td><td>{{ preview.published }}</td></tr>
+        <tr><th>アカウント</th><td>{{ live.users }}</td><td>{{ preview.users }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <details class="database-technical-details"><summary>ファイル確認情報</summary><dl><dt>ファイルサイズ</dt><dd>{{ '%.2f'|format(preview.size_bytes / 1024 / 1024) }} MB</dd><dt>SHA-256</dt><dd><code>{{ preview.sha256 }}</code></dd></dl></details>
+</section>
+
+<section class="form-card glass database-confirm-card">
+  <p class="eyebrow">STEP 3</p><h2>バックアップして更新</h2>
+  <div class="database-warning" role="alert">
+    <strong>更新すると、語彙・意味・例文・担当・履歴・メンバー情報が選択したDBの内容へ置き換わります。</strong>
+    <ul><li>現在のDBは更新直前に自動バックアップされ、復元できます。</li><li>現在ログイン中の完全管理者アカウントとパスワードは引き継がれます。</li><li>音声・画像の実ファイルはDBに含まれません。DB内の登録情報だけが更新されます。</li><li>更新中は数秒間、他の画面からの操作を一時停止します。</li></ul>
+  </div>
+  <form method="post" action="{{ url_for('admin_v2.apply_database_update') }}" class="database-confirm-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <label>現在の完全管理者パスワード<input type="password" name="password" required autocomplete="current-password"></label>
+    <label class="confirmation-check"><input type="checkbox" name="confirm" value="yes" required><span>現在のDBが置き換わることと、自動バックアップが作成されることを確認しました。</span></label>
+    <button class="database-update-button">このDBで安全に更新する</button>
+  </form>
+  <form method="post" action="{{ url_for('admin_v2.cancel_database_update') }}" class="database-cancel-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="quiet">選択を取り消す</button></form>
+</section>
+{% endif %}
+{% endblock %}
