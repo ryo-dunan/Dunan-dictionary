@@ -1,0 +1,41 @@
+{% extends "public/base.html" %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">{{ ui.hero_eyebrow }}</p>
+  <h1>{{ ui.hero_title }}</h1>
+  <p>{{ ui.hero_description }}</p>
+  <form class="public-search glass" method="get">
+    <input type="hidden" name="language" value="{{ language }}">
+    <label class="search-main"><span class="sr-only">{{ ui.search_term }}</span><input name="q" value="{{ query }}" placeholder="{{ ui.search_placeholder }}" autofocus><button>{{ ui.search }}</button></label>
+    <div class="search-options">
+      <label>{{ ui.target }}<select name="type">
+        <option value="headword" {% if request.args.get('type','headword')=='headword' %}selected{% endif %}>{{ ui.target_headword }}</option>
+        <option value="fulltext" {% if request.args.get('type')=='fulltext' %}selected{% endif %}>{{ ui.target_all }}</option>
+        <option value="examples" {% if request.args.get('type')=='examples' %}selected{% endif %}>{{ ui.target_examples }}</option>
+        <option value="conjugation" {% if request.args.get('type')=='conjugation' %}selected{% endif %}>{{ ui.target_conjugation }}</option>
+      </select></label>
+      <label>{{ ui.match }}<select name="match">
+        <option value="contains" {% if request.args.get('match','contains')=='contains' %}selected{% endif %}>{{ ui.contains }}</option>
+        <option value="prefix" {% if request.args.get('match')=='prefix' %}selected{% endif %}>{{ ui.prefix }}</option>
+        <option value="suffix" {% if request.args.get('match')=='suffix' %}selected{% endif %}>{{ ui.suffix }}</option>
+      </select></label>
+    </div>
+  </form>
+</section>
+{% if query %}
+<section class="results">
+  <div class="section-heading"><h2>{{ ui.results_for.format(query=query) }}</h2><span>{{ ui.result_count.format(count=results|length) }}</span></div>
+  <div class="result-grid">
+    {% for item in results %}
+    <a class="result-card glass" href="{{ url_for('public.entry',entry_id=item.id,slug=item.headword,language=language) }}">
+      <div><h3>{{ item.headword }}</h3><p class="reading">{{ item.kana or '' }} {% if item.ipa %}<span>/{{ item.ipa }}/</span>{% endif %}</p></div>
+      <span class="pos">{{ ui.pos.get(item.pos,item.pos) if item.pos else ui.pos_unknown }}</span>
+      <p>{{ item.definition or ui.meaning_pending }}</p>
+    </a>
+    {% else %}
+    <div class="empty-public glass"><h2>{{ ui.no_results }}</h2><p>{{ ui.no_results_help }}</p></div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "v2/base.html" %}
+{% block content %}
+<header class="topbar glass">
+  <div><p class="eyebrow">編集ダッシュボード</p><h1>{{ session.display_name }}さん</h1></div>
+  <form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="quiet">ログアウト</button></form>
+</header>
+<section class="welcome"><h2>今日は何をしますか？</h2><p>担当作業と確認依頼を、この画面から順番に進められます。</p></section>
+<nav class="cards" aria-label="主な作業">
+  <a class="task-card featured" href="{{ url_for('editorial.new_entry') }}"><span>＋</span><strong>新しい語彙を登録</strong><small>まず下書きとして保存します</small></a>
+  <a class="task-card" href="{{ url_for('editorial.tasks') }}"><span class="count">{{ counts.assigned }}</span><strong>自分の担当語彙を点検</strong><small>割り当てられた語彙を確認</small></a>
+  <a class="task-card" href="{{ url_for('editorial.tasks') }}"><span class="count warm">{{ counts.review }}</span><strong>相互確認待ち</strong><small>ほかの担当者からの確認依頼</small></a>
+  <a class="task-card" href="{{ url_for('editorial.tasks') }}"><span class="count alert">{{ counts.returned }}</span><strong>差し戻された語彙</strong><small>コメントを確認して修正</small></a>
+  <a class="task-card" href="{{ url_for('editorial.entries') }}"><span>⌕</span><strong>登録済み語彙を検索</strong><small>語彙の状態や担当者から検索</small></a>
+  <a class="task-card" href="{{ url_for('sources.index') }}"><span>▤</span><strong>資料・典拠を管理</strong><small>辞書・論文・調査記録を整理</small></a>
+  <a class="task-card" href="{{ url_for('editorial.my_history') }}"><span>↶</span><strong>自分の操作履歴</strong><small>点検した日付・語彙・操作を確認</small></a>
+</nav>
+{% if session.role == 'admin' %}<section class="admin-zone glass"><h2>完全管理者メニュー</h2><div class="admin-links"><a href="{{ url_for('admin_v2.index') }}">メンバー・割り当て・バックアップ</a><a href="{{ url_for('admin_v2.history') }}">進捗と変更履歴</a></div></section>{% endif %}
+{% endblock %}

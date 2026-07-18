@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>与那国語辞典</title>
+    <!-- ★★★ 修正点 ★★★ -->
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <style>
+        /* グローバルスタイル設定 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        /* トップタイトルバースタイル - 深い青色 */
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .logo {
+            height: 50px;
+            width: auto;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        /* ナビゲーションバースタイル - 薄い青色 */
+        .nav-bar {
+            background: linear-gradient(135deg, #4CA1AF 0%, #2C8C99 100%);
+            padding: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            justify-content: center;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+
+        .nav-tabs li {
+            margin: 0;
+        }
+
+        .nav-tabs a {
+            display: block;
+            color: white;
+            text-decoration: none;
+            padding: 15px 20px;
+            transition: background-color 0.3s;
+            font-size: 16px;
+        }
+
+        .nav-tabs a:hover {
+            background-color: rgba(255,255,255,0.2);
+        }
+
+        .nav-tabs a.active {
+            background-color: rgba(255,255,255,0.3);
+            font-weight: bold;
+        }
+
+        /* 言語セレクタースタイル */
+        .language-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .language-selector select {
+            padding: 8px 12px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background-color: rgba(255,255,255,0.2);
+            color: white;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .language-selector select:hover {
+            background-color: rgba(255,255,255,0.3);
+        }
+
+        .language-selector select option {
+            background-color: #2C8C99;
+            color: white;
+        }
+
+        /* メインコンテンツエリア */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 検索エリアスタイル */
+        .search-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+
+        /* 検索方向選択 */
+        .search-direction {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+
+        .search-direction label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .search-direction input[type="radio"] {
+            margin-right: 8px;
+        }
+
+        /* 検索ボックスとボタン */
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* 検索入力エリアと仮想キーボード */
+        .search-input-wrapper {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 50px 12px 20px;
+            border: 2px solid #4CA1AF;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            border-color: #2a5298;
+        }
+
+        .keyboard-icon {
+            position: absolute;
+            right: 15px;
+            cursor: pointer;
+            color: #4CA1AF;
+            font-size: 20px;
+            transition: color 0.3s;
+        }
+
+        .keyboard-icon:hover {
+            color: #2a5298;
+        }
+
+        /* 仮想キーボード */
+        .virtual-keyboard {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 10px;
+            background: white;
+            border: 2px solid #4CA1AF;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            display: none;
+            z-index: 1000;
+        }
+
+        .virtual-keyboard.show {
+            display: block;
+        }
+
+        .keyboard-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .keyboard-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .keyboard-button {
+            padding: 10px 15px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            text-align: center;
+            transition: background-color 0.2s;
+        }
+
+        .keyboard-button:hover {
+            background-color: #e0e0e0;
+        }
+
+        .keyboard-button:active {
+            background-color: #d0d0d0;
+        }
+
+        .search-button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #4CA1AF 0%, #2C8C99 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .search-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* 検索オプション */
+        .search-options {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .option-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        .option-group label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .option-group input[type="radio"] {
+            margin-right: 5px;
+        }
+
+        /* 検索結果エリア */
+        .results-section {
+            margin-top: 30px;
+        }
+
+        .result-item {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+
+        .result-headword {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2a5298;
+            margin-bottom: 5px;
+        }
+
+        .result-kana {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .result-pos {
+            display: inline-block;
+            background-color: #e3f2fd;
+            color: #1976d2;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .result-definition {
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .result-matched-form {
+            color: #ff6b6b;
+            font-size: 14px;
+            margin: 5px 0;
+            font-style: italic;
+        }
+
+        /* 見出し語詳細ページ */
+        .entry-detail {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+
+        .entry-header {
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .entry-header > div {
+            line-height: 1.8;
+        }
+        .entry-header .entry-reading {
+            line-height: 1.5;
+        }
+
+        .entry-headword {
+            font-size: 32px;
+            color: #2a5298;
+            margin-bottom: 10px;
+        }
+
+        .entry-reading {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 10px;
+        }
+
+        .reading-item {
+            display: flex;
+            align-items: baseline;
+        }
+
+        .reading-label {
+            font-weight: bold;
+            color: #666;
+            margin-right: 10px;
+        }
+
+        .entry-section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2a5298;
+            margin-bottom: 10px;
+            border-left: 4px solid #4CA1AF;
+            padding-left: 10px;
+        }
+
+        .meaning-item {
+            margin-bottom: 10px;
+            padding-left: 20px;
+        }
+
+        .meaning-number {
+            font-weight: bold;
+            color: #666;
+        }
+
+        .example-box {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .example-yonaguni {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .example-translation {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* 音声再生ボタン */
+        .audio-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 10px;
+            background-color: #4CA1AF;
+            color: white;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+            margin-left: 10px;
+        }
+
+        .audio-button:hover {
+            background-color: #2C8C99;
+        }
+
+        .audio-button:active {
+            transform: scale(0.95);
+        }
+
+        .audio-icon {
+            font-size: 16px;
+        }
+
+        /* 画像表示 */
+        .entry-images {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .entry-image {
+            max-width: 200px;
+            max-height: 200px;
+            object-fit: contain;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .entry-image:hover {
+            transform: scale(1.05);
+        }
+
+        .conjugation-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .conjugation-table th,
+        .conjugation-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        .conjugation-table th {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+
+        /* 開発中ページ */
+        .under-development {
+            text-align: center;
+            padding: 100px 20px;
+            color: #666;
+            font-size: 24px;
+        }
+
+        /* 戻るボタン */
+        .back-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #666;
+            color: white;
+            text-decoration: none;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            transition: background-color 0.3s;
+        }
+
+        .back-button:hover {
+            background-color: #555;
+        }
+
+        /* レスポンシブデザイン */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .nav-bar {
+                flex-direction: column;
+                padding: 0;
+            }
+            
+            .nav-tabs {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .nav-tabs a {
+                padding: 12px 15px;
+                font-size: 14px;
+            }
+            
+            .language-selector {
+                width: 100%;
+                justify-content: center;
+                padding: 10px 0;
+                background-color: rgba(0, 0, 0, 0.1);
+            }
+            
+            .search-section {
+                padding: 20px;
+            }
+            
+            .search-direction {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            
+            .search-box {
+                flex-direction: column;
+            }
+            
+            .search-input-wrapper {
+                width: 100%;
+            }
+            
+            .search-button {
+                width: 100%;
+            }
+            
+            .search-options {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .entry-reading {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+
+        /* ローディングアニメーション */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <!-- トップタイトルバー -->
+    <div class="header">
+        <div class="header-content">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="与那国語辞典ロゴ" class="logo" onerror="this.style.display='none'">
+            <h1 id="dict-name">与那国語辞典</h1>
+        </div>
+    </div>
+
+    <!-- ナビゲーションバー -->
+    <nav class="nav-bar">
+        <ul class="nav-tabs">
+            <li><a href="#home" class="nav-link active" data-page="home">ホーム</a></li>
+            <li><a href="#about-language" class="nav-link" data-page="about-language">与那国語について</a></li>
+            <li><a href="#grammar" class="nav-link" data-page="grammar">文法</a></li>
+            <li><a href="#dialect-materials" class="nav-link" data-page="dialect-materials">方言資料</a></li>
+            <li><a href="#about-dict" class="nav-link" data-page="about-dict">この辞典について</a></li>
+        </ul>
+        <div class="language-selector">
+            <span id="language-label">言語</span>
+            <select id="language-select">
+                <option value="ja">日本語</option>
+                <option value="yonaguni">どぅなんくとぅば</option>
+                <option value="zh-tw">繁體中文</option>
+                <option value="en">English</option>
+            </select>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツエリア -->
+    <div class="container" id="main-content">
+        <!-- デフォルトで検索ページを表示 -->
+        <div id="home-page" class="page-content">
+            <div class="search-section">
+                <!-- 検索方向選択 -->
+                <div class="search-direction">
+                    <label>
+                        <input type="radio" name="direction" value="yo_to_ja" checked>
+                        <span id="direction-yo-ja">与那国語→日本語</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="direction" value="ja_to_yo">
+                        <span id="direction-ja-yo">日本語→与那国語</span>
+                    </label>
+                </div>
+
+                <!-- 検索ボックス -->
+                <div class="search-box">
+                    <div class="search-input-wrapper">
+                        <input type="text" class="search-input" id="search-input" placeholder="検索語を入力してください">
+                        <span class="keyboard-icon" id="keyboard-toggle">⌨</span>
+                        <!-- 仮想キーボード -->
+                        <div class="virtual-keyboard" id="virtual-keyboard">
+                            <div class="keyboard-title">与那国語特殊文字</div>
+                            <div class="keyboard-buttons">
+                                <button class="keyboard-button" data-char="か゚">か゚</button>
+                                <button class="keyboard-button" data-char="き゚">き゚</button>
+                                <button class="keyboard-button" data-char="く゚">く゚</button>
+                                <button class="keyboard-button" data-char="'">'</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="search-button" id="search-button">検索</button>
+                </div>
+
+                <!-- 検索オプション -->
+                <div class="search-options">
+                    <div class="option-group">
+                        <label>
+                            <input type="radio" name="search-type" value="headword" checked>
+                            <span id="search-type-headword">見出し語のみ</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="search-type" value="conjugation">
+                            <span id="search-type-conjugation">動詞活用形</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="search-type" value="fulltext">
+                            <span id="search-type-fulltext">例文全文検索</span>
+                        </label>
+                    </div>
+                    <div class="option-group">
+                        <label>
+                            <input type="radio" name="match-type" value="prefix" checked>
+                            <span id="match-type-prefix">前方一致</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="match-type" value="suffix">
+                            <span id="match-type-suffix">後方一致</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="match-type" value="contains">
+                            <span id="match-type-contains">含む</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 検索結果エリア -->
+            <div class="results-section" id="results-section" style="display: none;">
+                <h2 style="margin-bottom: 20px;" id="results-title">検索結果</h2>
+                <div id="results-container"></div>
+            </div>
+        </div>
+
+        <!-- その他のページコンテンツ（開発中） -->
+        <div id="about-language-page" class="page-content" style="display: none;">
+            <div class="under-development">開発中</div>
+        </div>
+        <div id="grammar-page" class="page-content" style="display: none;">
+            <div class="under-development">開発中</div>
+        </div>
+        <div id="dialect-materials-page" class="page-content" style="display: none;">
+            <div class="under-development">開発中</div>
+        </div>
+        <div id="about-dict-page" class="page-content" style="display: none;">
+            <div class="under-development">開発中</div>
+        </div>
+
+        <!-- 見出し語詳細ページ -->
+        <div id="entry-detail-page" class="page-content" style="display: none;">
+            <a href="#" class="back-button" id="back-to-results">← 検索結果に戻る</a>
+            <div class="entry-detail" id="entry-detail-content">
+                <!-- 詳細コンテンツはJavaScriptで動的に入力される -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // グローバル変数
+        let currentLanguage = 'ja';  // 現在のインターフェース言語
+        let uiTranslations = {};     // UI翻訳テキスト
+        let searchResults = [];      // 検索結果キャッシュ
+
+        // ページ読み込み完了後に初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            // localStorageから保存された言語設定を取得、なければ日本語をデフォルトに
+            currentLanguage = localStorage.getItem('preferredLanguage') || 'ja';
+            document.getElementById('language-select').value = currentLanguage;
+            
+            loadUITranslations(currentLanguage);
+            setupEventListeners();
+        });
+
+        // UI翻訳を読み込む
+        async function loadUITranslations(language) {
+            try {
+                const response = await fetch(`/api/ui-translations/${language}`);
+                uiTranslations = await response.json();
+                updateUIText();
+                updateSearchDirection(language);
+            } catch (error) {
+                console.error('Failed to load translations:', error);
+            }
+        }
+
+        // UIテキストを更新
+        function updateUIText() {
+            // 辞典名を更新
+            document.getElementById('dict-name').textContent = uiTranslations.dict_name || '与那国語辞典';
+            
+            // 言語セレクターラベルを更新
+            document.getElementById('language-label').textContent = uiTranslations.language_selector || '言語';
+            
+            // ナビゲーションメニューを更新
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks[0].textContent = uiTranslations.nav_home || 'ホーム';
+            navLinks[1].textContent = uiTranslations.nav_about_language || '与那国語について';
+            navLinks[2].textContent = uiTranslations.nav_grammar || '文法';
+            navLinks[3].textContent = uiTranslations.nav_dialect_materials || '方言資料';
+            navLinks[4].textContent = uiTranslations.nav_about_dict || 'この辞典について';
+            
+            // 検索オプションを更新
+            document.getElementById('direction-yo-ja').textContent = 
+                uiTranslations.search_direction_yo_to_ja || '与那国語→日本語';
+            document.getElementById('direction-ja-yo').textContent = 
+                uiTranslations.search_direction_ja_to_yo || '日本語→与那国語';
+            document.getElementById('search-button').textContent = 
+                uiTranslations.search_button || '検索';
+            document.getElementById('search-type-headword').textContent = 
+                uiTranslations.search_type_headword || '見出し語のみ';
+            document.getElementById('search-type-conjugation').textContent = 
+                uiTranslations.search_type_conjugation || '動詞活用形';
+            document.getElementById('search-type-fulltext').textContent = 
+                uiTranslations.search_type_fulltext || '例文全文検索';
+            document.getElementById('match-type-prefix').textContent = 
+                uiTranslations.match_type_prefix || '前方一致';
+            document.getElementById('match-type-suffix').textContent = 
+                uiTranslations.match_type_suffix || '後方一致';
+            document.getElementById('match-type-contains').textContent = 
+                uiTranslations.match_type_contains || '含む';
+            
+            // 検索ボックスのプレースホルダーを更新
+            document.getElementById('search-input').placeholder = 
+                uiTranslations.search_placeholder || '検索語を入力してください';
+            
+            // 戻るボタンを更新
+            document.getElementById('back-to-results').textContent = 
+                '← ' + (uiTranslations.back_to_results || '検索結果に戻る');
+            
+            // 開発中の提示を更新
+            const underDevElements = document.querySelectorAll('.under-development');
+            underDevElements.forEach(el => {
+                el.textContent = uiTranslations.under_development || '開発中';
+            });
+        }
+
+        // 言語に基づいて検索方向を更新
+        function updateSearchDirection(language) {
+            const directionRadios = document.querySelectorAll('input[name="direction"]');
+            
+            // 与那国語インターフェースを選択した場合、デフォルトの検索方向を与那国語から他言語に変更
+            if (language === 'yonaguni') {
+                directionRadios[0].checked = true; // yo_to_ja
+            }
+        }
+
+        // イベントリスナーを設定
+        function setupEventListeners() {
+            // ナビゲーション切り替え
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    switchPage(this.dataset.page);
+                    
+                    // アクティブ状態を更新
+                    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+
+            // 言語切り替え
+            document.getElementById('language-select').addEventListener('change', function(e) {
+                currentLanguage = e.target.value;
+                localStorage.setItem('preferredLanguage', currentLanguage);
+                loadUITranslations(currentLanguage);
+                
+                // 検索結果が表示されている場合、新しい言語で再検索
+                if (document.getElementById('results-section').style.display !== 'none' && searchResults.length > 0) {
+                    performSearch();
+                }
+            });
+
+            // 検索ボタン
+            document.getElementById('search-button').addEventListener('click', performSearch);
+            
+            // Enterキーで検索
+            document.getElementById('search-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performSearch();
+                }
+            });
+
+            // 戻るボタン
+            document.getElementById('back-to-results').addEventListener('click', function(e) {
+                e.preventDefault();
+                showSearchResults();
+            });
+
+            // 仮想キーボードの設定
+            setupVirtualKeyboard();
+        }
+
+        // 仮想キーボードの設定
+        function setupVirtualKeyboard() {
+            const keyboardToggle = document.getElementById('keyboard-toggle');
+            const virtualKeyboard = document.getElementById('virtual-keyboard');
+            const searchInput = document.getElementById('search-input');
+            
+            // キーボードアイコンのクリック
+            keyboardToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                virtualKeyboard.classList.toggle('show');
+            });
+            
+            // キーボードボタンのクリック
+            document.querySelectorAll('.keyboard-button').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const char = this.getAttribute('data-char');
+                    
+                    // 現在のカーソル位置に文字を挿入
+                    const start = searchInput.selectionStart;
+                    const end = searchInput.selectionEnd;
+                    const text = searchInput.value;
+                    
+                    searchInput.value = text.substring(0, start) + char + text.substring(end);
+                    searchInput.focus();
+                    searchInput.setSelectionRange(start + char.length, start + char.length);
+                });
+            });
+            
+            // 外側クリックで閉じる
+            document.addEventListener('click', function(e) {
+                if (!virtualKeyboard.contains(e.target) && e.target !== keyboardToggle) {
+                    virtualKeyboard.classList.remove('show');
+                }
+            });
+        }
+
+        // ページを切り替える
+        function switchPage(pageName) {
+            // すべてのページを非表示
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.style.display = 'none';
+            });
+            
+            // ターゲットページを表示
+            const targetPage = document.getElementById(`${pageName}-page`);
+            if (targetPage) {
+                targetPage.style.display = 'block';
+            }
+        }
+
+        // 検索を実行
+        async function performSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+
+            // 検索パラメータを取得
+            const searchParams = {
+                query: query,
+                direction: document.querySelector('input[name="direction"]:checked').value,
+                search_type: document.querySelector('input[name="search-type"]:checked').value,
+                match_type: document.querySelector('input[name="match-type"]:checked').value,
+                language: currentLanguage
+            };
+
+            // ローディング表示
+            const resultsContainer = document.getElementById('results-container');
+            resultsContainer.innerHTML = `<div class="loading">${uiTranslations.searching || '検索中'}</div>`;
+            document.getElementById('results-section').style.display = 'block';
+            
+            // 検索結果タイトルを更新
+            document.getElementById('results-title').textContent = uiTranslations.search_results || '検索結果';
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(searchParams)
+                });
+
+                const data = await response.json();
+                searchResults = data.results;
+                displaySearchResults(searchResults);
+            } catch (error) {
+                console.error('Search failed:', error);
+                resultsContainer.innerHTML = `<p>${uiTranslations.search_error || '検索エラーが発生しました。'}</p>`;
+            }
+        }
+
+        // 検索結果を表示
+        function displaySearchResults(results) {
+            const resultsContainer = document.getElementById('results-container');
+            
+            if (results.length === 0) {
+                resultsContainer.innerHTML = `<p>${uiTranslations.no_results || '該当する結果が見つかりませんでした。'}</p>`;
+                return;
+            }
+
+            resultsContainer.innerHTML = results.map(result => {
+                let matchedFormHtml = '';
+                if (result.matched_form) {
+                    matchedFormHtml = `<div class="result-matched-form">（活用形: ${result.matched_form} - ${result.form_name}）</div>`;
+                }
+                
+                return `
+                    <div class="result-item" onclick="showEntryDetail(${result.id})">
+                        <div class="result-headword">${result.headword}</div>
+                        ${result.kana ? `<div class="result-kana">${result.kana}</div>` : ''}
+                        ${result.pos ? `<span class="result-pos">${result.pos}</span>` : ''}
+                        ${matchedFormHtml}
+                        <div class="result-definition">${result.definition || ''}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 見出し語詳細を表示
+        async function showEntryDetail(entryId) {
+            // 詳細ページに切り替え
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.style.display = 'none';
+            });
+            document.getElementById('entry-detail-page').style.display = 'block';
+
+            // ローディング表示
+            const detailContent = document.getElementById('entry-detail-content');
+            detailContent.innerHTML = `<div class="loading">${uiTranslations.loading || '読み込み中'}</div>`;
+
+            try {
+                const response = await fetch(`/api/entry/${entryId}?language=${currentLanguage}`);
+                const entry = await response.json();
+                displayEntryDetail(entry);
+            } catch (error) {
+                console.error('Failed to load entry:', error);
+                detailContent.innerHTML = `<p>${uiTranslations.error_occurred || 'エラーが発生しました。'}</p>`;
+            }
+        }
+        
+        // 見出し語詳細情報を表示
+        function displayEntryDetail(entry) {
+            const detailContent = document.getElementById('entry-detail-content');
+            
+            let html = `
+                <div class="entry-header">
+                    <h1 class="entry-headword">${entry.headword}</h1>
+                    <div class="entry-reading">
+            `;
+
+            // かなとIPA表記
+            if (entry.kana) {
+                html += `
+                    <div class="reading-item">
+                        <span class="reading-label">${uiTranslations.label_kana || 'かな表記'}:</span>
+                        <span>${entry.kana}</span>
+                    </div>
+                `;
+            }
+            if (entry.ipa) {
+                html += `
+                    <div class="reading-item">
+                        <span class="reading-label">${uiTranslations.label_ipa || 'IPA表記'}:</span>
+                        <span>${entry.ipa}</span>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+
+            // 基本情報セクション
+            html += '<div class="entry-basic-info">';
+
+            if (entry.pos) {
+                html += `<div><strong>${uiTranslations.label_pos || '品詞'}:</strong> ${entry.pos}</div>`;
+            }
+            
+            if (entry.pos === '動詞') {
+                 if (entry.verb_class) {
+                    html += `<div><strong>${uiTranslations.label_verb_class || '動詞クラス'}:</strong> ${entry.verb_class}</div>`;
+                }
+                if (entry.verb_stem) {
+                    html += `<div><strong>${uiTranslations.label_verb_stem || '語幹'}:</strong> ${entry.verb_stem}</div>`;
+                }
+            }
+
+            if (entry.tone) {
+                html += `<div><strong>${uiTranslations.label_tone || '音調'}:</strong> ${entry.tone}</div>`;
+            }
+            
+            html += '</div>';
+
+            // 見出し語の音声
+            if (entry.audio) {
+                html += `
+                    <div style="margin-top: 10px;">
+                        <button class="audio-button" onclick="playAudio('/static/media/${entry.audio}')">
+                            <span class="audio-icon">🔊</span>
+                            発音を聞く
+                        </button>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+
+            // 意味
+            if (entry.meanings && entry.meanings.length > 0) {
+                html += `
+                    <div class="entry-section">
+                        <h2 class="section-title">${uiTranslations.label_meaning || '意味'}</h2>
+                `;
+                
+                entry.meanings.forEach(meaning => {
+                    html += `
+                        <div class="meaning-item">
+                            ${entry.meanings.length > 1 ? `<span class="meaning-number">${meaning.number}.</span>` : ''}
+                            ${meaning.definition}
+                        </div>
+                    `;
+                });
+                
+                // 見出し語の画像
+                if (entry.images && entry.images.length > 0) {
+                    html += `
+                        <div class="entry-images" style="margin-top: 15px;">
+                            ${entry.images.map(img => `
+                                <img src="/static/media/${img}" class="entry-image" onclick="openImage('/static/media/${img}')" alt="見出し語画像">
+                            `).join('')}
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+            }
+
+            // 同義語
+            if (entry.synonyms && entry.synonyms.length > 0) {
+                html += `
+                    <div class="entry-section">
+                        <h2 class="section-title">${uiTranslations.label_synonyms || '同義語'}</h2>
+                        <div>${entry.synonyms.join('、')}</div>
+                    </div>
+                `;
+            }
+
+            // 動詞活用
+            if (entry.conjugations && entry.conjugations.length > 0) {
+                html += `
+                    <div class="entry-section">
+                        <h2 class="section-title">${uiTranslations.label_conjugation || '活用形'}</h2>
+                        <table class="conjugation-table">
+                            <thead>
+                                <tr>
+                                    <th>${uiTranslations.conjugation_form || '活用形'}</th>
+                                    <th>${uiTranslations.conjugated_result || '形態'}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                entry.conjugations.forEach(conj => {
+                    html += `
+                        <tr>
+                            <td>${conj.form}</td>
+                            <td>${conj.conjugated}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            // 語源
+            if (entry.etymology) {
+                html += `
+                    <div class="entry-section">
+                        <h2 class="section-title">${uiTranslations.label_etymology || '語源'}</h2>
+                        <div>${entry.etymology}</div>
+                    </div>
+                `;
+            }
+
+            // 歴史的音変化
+            if (entry.historical_change) {
+                html += `
+                    <div class="entry-section">
+                        <h2 class="section-title">${uiTranslations.label_historical_change || '歴史的音変化'}</h2>
+                        <div>${entry.historical_change}</div>
+                    </div>
+                `;
+            }
+
+            // 例文
+            if (entry.examples && entry.examples.length > 0) {
+                html += `
+                    <div class="entry-section">
+                        <h2 class="section-title">${uiTranslations.label_examples || '例文'}</h2>
+                `;
+                
+                entry.examples.forEach(example => {
+                    html += `
+                        <div class="example-box">
+                            <div class="example-yonaguni">
+                                ${example.yonaguni}
+                                ${example.audio ? `
+                                    <button class="audio-button" onclick="playAudio('/static/media/${example.audio}')">
+                                        <span class="audio-icon">🔊</span>
+                                    </button>
+                                ` : ''}
+                            </div>
+                            ${example.word_by_word ? `
+                                <div class="example-translation">
+                                    <strong>${uiTranslations.label_word_by_word || '逐語訳'}:</strong> ${example.word_by_word}
+                                </div>
+                            ` : ''}
+                            ${example.translation ? `
+                                <div class="example-translation">
+                                    <strong>${uiTranslations.label_free_translation || '意訳'}:</strong> ${example.translation}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+            }
+
+            detailContent.innerHTML = html;
+        }
+
+        // 検索結果に戻る
+        function showSearchResults() {
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.style.display = 'none';
+            });
+            document.getElementById('home-page').style.display = 'block';
+            
+            // ナビゲーションバーの状態を復元
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelector('[data-page="home"]').classList.add('active');
+        }
+
+        // 音声を再生
+        function playAudio(audioPath) {
+            const audio = new Audio(audioPath);
+            audio.play().catch(error => {
+                console.error('音声再生エラー:', error);
+                alert('音声ファイルの再生に失敗しました。');
+            });
+        }
+
+        // 画像を新しいタブで開く
+        function openImage(imagePath) {
+            window.open(imagePath, '_blank');
+        }
+    </script>
+</body>
+</html>

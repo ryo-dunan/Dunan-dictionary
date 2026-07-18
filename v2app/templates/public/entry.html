@@ -1,0 +1,57 @@
+{% extends "public/base.html" %}
+{% block title %}{{ entry.headword }} | どぅなんむぬい辞典{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ url_for('public.index',language=language) }}">← {{ ui.back }}</a>
+<article class="word-hero glass">
+  <div><p class="eyebrow">{{ ui.headword }}</p><h1>{{ entry.headword }}</h1><p class="word-reading">{{ entry.kana or '' }} {% if entry.ipa %}<span>/{{ entry.ipa }}/</span>{% endif %}</p></div>
+  <span class="pos large">{{ ui.pos.get(entry.pos,entry.pos) if entry.pos else ui.pos_unknown }}</span>
+  {% for item in media if item.file_type=='audio' %}<audio controls src="{{ url_for('public.media',filename=item.file_path) }}"></audio>{% endfor %}
+</article>
+{% if fallback %}<p class="fallback-note">{{ ui.fallback }}</p>{% endif %}
+
+<div class="entry-layout">
+  <div class="entry-main">
+    {% if has_default_meanings %}
+    <section class="content-card glass"><h2>{{ ui.meanings }}</h2>
+      {% for meaning in meanings %}<div class="meaning"><span>{{ meaning.meaning_number }}</span><p>{{ meaning.definition }}</p></div>{% endfor %}
+      {% if synonyms %}<p class="meta-line"><strong>{{ ui.synonyms }}</strong> {% for item in synonyms %}{{ item.synonym }}{% if not loop.last %}・{% endif %}{% endfor %}</p>{% endif %}
+    </section>
+    {% elif not source_sections and not conjugations and not examples %}
+    <section class="content-card glass"><h2>{{ ui.meanings }}</h2><p>{{ ui.meaning_pending }}</p></section>
+    {% endif %}
+
+    {% if conjugations %}
+    <section class="content-card glass"><h2>{{ ui.conjugation_table }}</h2><div class="public-table-wrap"><table class="public-conjugation-table"><thead><tr><th>{{ ui.conjugation_type }}</th><th>{{ ui.word_form }}</th></tr></thead><tbody>{% for item in conjugations %}<tr><th scope="row">{{ ui.conjugations.get(item.form_name,item.form_name) }}</th><td>{{ item.conjugated_form }}</td></tr>{% endfor %}</tbody></table></div></section>
+    {% endif %}
+
+    {% if examples %}
+    <section class="content-card glass"><h2>{{ ui.examples }}</h2>{% for ex in examples %}<article class="public-example"><div><strong>{{ ex.sentence }}</strong>{% if ex.audio %}<audio controls src="{{ url_for('public.media',filename=ex.audio) }}"></audio>{% endif %}</div>{% if ex.translation %}<p class="word-by-word">{{ ex.translation.word_by_word or '' }}</p><p>{{ ex.translation.free_translation or '' }}</p>{% else %}<p class="translation-missing">{{ ui.translation_missing }}</p>{% endif %}</article>{% endfor %}</section>
+    {% endif %}
+
+    {% if entry.etymology or entry.historical_change or entry.supplemental_note %}
+    <section class="content-card glass"><h2>{{ ui.supplemental }}</h2>{% if entry.etymology %}<p><strong>{{ ui.etymology }}</strong><br>{{ entry.etymology }}</p>{% endif %}{% if entry.historical_change %}<p><strong>{{ ui.historical_change }}</strong><br>{{ entry.historical_change }}</p>{% endif %}{% if entry.supplemental_note %}<p><strong>{{ ui.free_note }}</strong><br>{{ entry.supplemental_note }}</p>{% endif %}</section>
+    {% endif %}
+
+    {% if media|selectattr('file_type','equalto','image')|list %}
+    <section class="content-card glass image-gallery"><h2>{{ ui.images }}</h2>{% for item in media if item.file_type=='image' %}<img class="entry-image" src="{{ url_for('public.media',filename=item.file_path) }}" alt="{{ item.description or entry.headword }}">{% endfor %}</section>
+    {% endif %}
+
+    {% for section in source_sections %}
+    <section class="dictionary-continuation glass">
+      <header class="dictionary-continuation-header"><p class="eyebrow">{{ ui.source }}</p><h2>{{ section.name }}{% if section.abbreviation %}（{{ section.abbreviation }}）{% endif %}</h2>{% if section.source_headword %}<p>{{ ui.source_headword }}：<strong>{{ section.source_headword }}</strong></p>{% endif %}</header>
+      <div class="dictionary-continuation-body">
+        <section><h3>{{ ui.meanings }}</h3>{% for meaning in section.display_meanings %}<div class="meaning"><span>{{ loop.index }}</span><p>{{ meaning }}</p></div>{% else %}<p>{{ ui.meaning_missing }}</p>{% endfor %}{% if section.synonyms %}<p class="meta-line"><strong>{{ ui.synonyms }}</strong> {{ section.synonyms|join('・') }}</p>{% endif %}</section>
+        {% if section.conjugations %}<section><h3>{{ ui.conjugation_table }}</h3><div class="public-table-wrap"><table class="public-conjugation-table"><thead><tr><th>{{ ui.conjugation_type }}</th><th>{{ ui.word_form }}</th></tr></thead><tbody>{% for item in section.conjugations %}<tr><th scope="row">{{ ui.conjugations.get(item.form,item.form) }}</th><td>{{ item.conjugated }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+        {% if section.display_examples %}<section><h3>{{ ui.examples }}</h3>{% for ex in section.display_examples %}<article class="public-example"><strong>{{ ex.sentence }}</strong>{% if ex.translation %}<p class="word-by-word">{{ ex.translation.word_by_word or '' }}</p><p>{{ ex.translation.free_translation or '' }}</p>{% else %}<p class="translation-missing">{{ ui.translation_missing }}</p>{% endif %}</article>{% endfor %}</section>{% endif %}
+        {% if section.etymology or section.historical_change or section.note %}<section><h3>{{ ui.supplemental }}</h3>{% if section.etymology %}<p><strong>{{ ui.etymology }}</strong><br>{{ section.etymology }}</p>{% endif %}{% if section.historical_change %}<p><strong>{{ ui.historical_change }}</strong><br>{{ section.historical_change }}</p>{% endif %}{% if section.note %}<p><strong>{{ ui.free_note }}</strong><br>{{ section.note }}</p>{% endif %}</section>{% endif %}
+        <footer><small>{% if section.locator %}{{ section.locator }}<br>{% endif %}{{ section.bibliography }}</small>{% if section.safe_url %}<a href="{{ section.safe_url }}" rel="noopener noreferrer">{{ ui.source_link }}</a>{% endif %}</footer>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+
+  <aside>
+    {% if entry.verb_class or entry.verb_stem or entry.tone %}<section class="side-card glass"><h2>{{ ui.word_shape_tone }}</h2><dl><dt>{{ ui.verb_class }}</dt><dd>{{ entry.verb_class or '—' }}</dd><dt>{{ ui.stem }}</dt><dd>{{ entry.verb_stem or '—' }}</dd><dt>{{ ui.tone }}</dt><dd>{{ entry.tone or '—' }}</dd></dl></section>{% endif %}
+  </aside>
+</div>
+{% endblock %}

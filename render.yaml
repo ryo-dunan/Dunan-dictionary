@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: dunan-dictionary
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-v2.txt
+    startCommand: python scripts/render_start.py
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    disk:
+      name: dunan-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: YONAGUNI_SECRET_KEY
+        generateValue: true
+      - key: YONAGUNI_DATABASE
+        value: /var/data/yonaguni_v2.db
+      - key: YONAGUNI_MEDIA_ROOT
+        value: /var/data/media
+      - key: YONAGUNI_BACKUP_ROOT
+        value: /var/data/backups
+      - key: YONAGUNI_HTTPS
+        value: "1"
+      - key: YONAGUNI_TRUSTED_HOSTS
+        value: .onrender.com
+      - key: YONAGUNI_ADMIN_USERNAME
+        sync: false
+      - key: YONAGUNI_ADMIN_DISPLAY_NAME
+        sync: false
+      - key: YONAGUNI_ADMIN_PASSWORD
+        sync: false

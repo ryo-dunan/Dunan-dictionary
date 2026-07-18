@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}どぅなんむぬい辞典 管理{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/admin.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/editorial.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/examples.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/source-editor.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/source-records.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/source-sections.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/media-editor.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/conjugation-tables.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/optional-review.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/inspection.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/management.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/history.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='public/images.css') }}">
+</head>
+<body>
+  <div class="background" aria-hidden="true"></div>
+  <main class="shell">{% block content %}{% endblock %}</main>
+<script src="{{ url_for('static', filename='v2/examples.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='v2/structured-fields.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='v2/source-sections.js') }}" defer></script>
+<script src="{{ url_for('static', filename='v2/autosave.js') }}" defer></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{% extends "v2/base.html" %}{% block content %}
+<header class="topbar glass"><div><p class="eyebrow">自分の記録</p><h1>点検・操作履歴</h1></div><a class="quiet link-button" href="{{ url_for('editorial.tasks') }}">作業一覧へ戻る</a></header>
+{% for message in get_flashed_messages() %}<div class="notice page-notice" role="alert">{{ message }}</div>{% endfor %}
+<section class="review-summary glass"><p>自分がいつ、どの語彙に、どの操作をしたかを新しい順に表示しています。過去の編集前データは、公開内容を直接変更せず下書きとして復元できます。</p></section>
+
+<section class="list-card glass request-history"><h2>自分が依頼した相互確認 <span class="pill">{{ requests|length }}</span></h2>
+  {% if requests %}<div class="request-list">{% for item in requests %}<article class="request-row">
+    <div><strong>{{ item.headword }}</strong><span class="request-status status-{{ item.status }}">{{ request_status_labels.get(item.status,item.status) }}</span><p>{{ item.local_requested_at }} JST・確認担当：{{ item.reviewer_name }}</p>{% if item.change_summary %}<small>{{ item.change_summary }}</small>{% endif %}</div>
+    <a class="quiet link-button" href="{{ url_for('editorial.request_status',review_id=item.id) }}">内容と状態を見る{% if item.status=='pending' %}・撤回{% endif %}</a>
+  </article>{% endfor %}</div>{% else %}<p class="empty">自分から依頼した相互確認はまだありません。</p>{% endif %}
+</section>
+
+<section class="list-card glass history-list"><h2>自分の操作</h2>{% for item in history %}<article class="personal-history-item"><time>{{ item.local_created_at }} JST</time><div class="history-content"><strong>{% if item.entry_id %}<a href="{{ url_for('editorial.entry_history',entry_id=item.entry_id) }}">{{ item.headword or ('語彙 #' ~ item.entry_id) }}</a>{% else %}辞書全体{% endif %}</strong><p>{{ item.action_label }}</p>{% if item.detail %}<small>{{ item.detail }}</small>{% endif %}</div>{% if item.entry_id %}<div class="history-actions">{% if item.can_edit %}<a class="quiet link-button" href="{{ url_for('editorial.edit_entry',entry_id=item.entry_id) }}">再編集</a>{% endif %}{% if item.can_restore %}<form method="post" action="{{ url_for('editorial.restore_history',audit_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="restore-button">編集前を下書き復元</button></form>{% endif %}</div>{% endif %}</article>{% else %}<p class="empty">操作履歴はまだありません。</p>{% endfor %}</section>
+{% endblock %}

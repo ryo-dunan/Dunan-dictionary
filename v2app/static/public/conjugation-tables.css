@@ -1,0 +1,8 @@
+.public-table-wrap { overflow-x: auto; border: 1px solid rgba(21,53,60,.14); border-radius: 14px; }
+.public-conjugation-table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,.48); }
+.public-conjugation-table th,
+.public-conjugation-table td { padding: 12px 15px; border-bottom: 1px solid rgba(21,53,60,.12); text-align: left; }
+.public-conjugation-table thead th { color: var(--muted); background: rgba(8,126,130,.08); font-size: .8rem; }
+.public-conjugation-table tbody th { width: 42%; color: var(--ocean); font-weight: 700; }
+.public-conjugation-table tbody tr:last-child th,
+.public-conjugation-table tbody tr:last-child td { border-bottom: 0; }

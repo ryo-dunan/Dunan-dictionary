@@ -1,0 +1,10 @@
+.conjugation-table-wrap { margin-top: 12px; overflow-x: auto; border: 1px solid #c7d9d6; border-radius: 14px; }
+.conjugation-editor-table { width: 100%; min-width: 480px; border-collapse: collapse; background: rgba(255,255,255,.72); }
+.conjugation-editor-table th,
+.conjugation-editor-table td { padding: 10px 12px; border-bottom: 1px solid #d8e5e3; text-align: left; vertical-align: middle; }
+.conjugation-editor-table thead th { color: var(--muted); background: #edf5f3; font-size: .82rem; }
+.conjugation-editor-table tbody tr:last-child td { border-bottom: 0; }
+.conjugation-editor-table select,
+.conjugation-editor-table input { width: 100%; margin: 0; }
+.conjugation-editor-table td:last-child { width: 78px; }
+.conjugation-editor-table .compact-remove { padding: 10px 12px; white-space: nowrap; }

@@ -1,0 +1,22 @@
+.dictionary-continuation {
+  overflow: hidden;
+  border-radius: 23px;
+}
+.dictionary-continuation-header {
+  padding: 22px 27px;
+  border-bottom: 1px solid rgba(21, 53, 60, .12);
+  background: rgba(244, 223, 183, .28);
+}
+.dictionary-continuation-header h2 { margin: 3px 0; font-size: 1.35rem; }
+.dictionary-continuation-header p:last-child { margin-bottom: 0; }
+.dictionary-continuation-body { display: grid; gap: 20px; padding: 27px; }
+.dictionary-continuation-body > section + section { padding-top: 18px; border-top: 1px solid rgba(21, 53, 60, .12); }
+.dictionary-continuation-body h3 { color: var(--ocean); font-size: 1.05rem; }
+.dictionary-continuation-body > footer {
+  display: grid;
+  gap: 8px;
+  padding: 17px 0 0;
+  border-top: 1px solid rgba(21, 53, 60, .12);
+  text-align: left;
+}
+.dictionary-continuation-body > footer a { color: var(--ocean); }

@@ -1,0 +1,21 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+# Local dictionary databases may contain accounts, audit logs, and unpublished data.
+*.db
+*.db-*
+!database/yonaguni_v2_seed.db
+*.sqlite
+*.sqlite3
+backups/
+.env
+.pytest_cache/
+.coverage
+
+# Source datasets and uploaded media are managed outside the public code repository.
+v6/bulk.json
+v6/test.json
+v6/file_processing/*.xlsx
+v6/file_processing/*.csv
