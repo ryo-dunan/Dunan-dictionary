@@ -242,10 +242,13 @@ class V2AppTest(unittest.TestCase):
 
             db = get_db()
             entry_ids = []
-            for headword in ("zqstemrun", "zQstem-"):
+            for headword, kana, ipa in (
+                ("zqstemrun", "直接一致", "[direct]"),
+                ("語幹の項目", "ごかんのこうもく", "[zQstem-]"),
+            ):
                 entry_id = db.execute(
                     "INSERT INTO entries(headword,kana,ipa,pos) VALUES(?,?,?,?)",
-                    (headword, headword, headword, "動詞"),
+                    (headword, kana, ipa, "動詞"),
                 ).lastrowid
                 db.execute(
                     "INSERT INTO meanings(entry_id,language,meaning_number,definition) VALUES(?, 'ja', 1, '語幹検索テスト')",
@@ -256,6 +259,13 @@ class V2AppTest(unittest.TestCase):
                     (entry_id,),
                 )
                 entry_ids.append(entry_id)
+            actual_stem_id = db.execute(
+                "SELECT id FROM entries WHERE ipa='[uTir-]' ORDER BY id LIMIT 1"
+            ).fetchone()["id"]
+            db.execute(
+                "INSERT OR IGNORE INTO entry_workflow(entry_id,publication_status) VALUES(?,'published')",
+                (actual_stem_id,),
+            )
             rebuild_search_index(db)
             db.commit()
 
@@ -264,8 +274,13 @@ class V2AppTest(unittest.TestCase):
                 for row in search_entries(db, "ZQSTEMRUN", "ja", "headword", "contains")
                 if row["id"] in entry_ids
             ]
+            actual_result_ids = [
+                row["id"]
+                for row in search_entries(db, "utirun", "ja", "headword", "contains")
+            ]
 
         self.assertEqual(ranked_ids, entry_ids)
+        self.assertIn(actual_stem_id, actual_result_ids)
 
     def test_unpublished_draft_has_no_public_url(self):
         entry_id=self.create_draft()
