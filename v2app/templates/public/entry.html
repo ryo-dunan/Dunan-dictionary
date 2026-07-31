@@ -1,7 +1,7 @@
 {% extends "public/base.html" %}
 {% block title %}{{ entry.headword }} | どぅなんむぬい辞典{% endblock %}
 {% block content %}
-<a class="back-link" href="{{ url_for('public.index',language=language) }}">← {{ ui.back }}</a>
+<a class="back-link" href="{{ back_url }}">← {{ ui.back }}</a>
 <article class="word-hero glass">
   <div><p class="eyebrow">{{ ui.headword }}</p><h1>{{ entry.headword }}</h1><p class="word-reading">{{ entry.kana or '' }} {% if entry.ipa %}<span>/{{ entry.ipa }}/</span>{% endif %}</p></div>
   <span class="pos large">{{ ui.pos.get(entry.pos,entry.pos) if entry.pos else ui.pos_unknown }}</span>

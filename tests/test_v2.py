@@ -8,7 +8,7 @@ from werkzeug.datastructures import MultiDict
 
 from v2app import create_app
 from scripts.upgrade_v2 import apply_upgrades
-from v2app.search import normalize, rebuild_search_index
+from v2app.search import normalize, rebuild_search_index, search_entries
 from v2app.workflow import snapshot_from_form
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -177,6 +177,64 @@ class V2AppTest(unittest.TestCase):
         response=self.client.get("/?q=ＴＥＳＵＴＵ&type=headword&match=contains")
         self.assertEqual(response.status_code,200)
         self.assertIn("てすとぅ".encode(),response.data)
+
+    def test_public_search_ranks_best_match_and_preserves_return_url(self):
+        with self.app.app_context():
+            from v2app.db import get_db
+
+            db = get_db()
+            entry_ids = {}
+            for label, headword in (
+                ("exact", "zqx"),
+                ("prefix", "zqxabc"),
+                ("suffix", "abczqx"),
+                ("contains", "abczqxdef"),
+            ):
+                entry_id = db.execute(
+                    "INSERT INTO entries(headword,kana,ipa,pos) VALUES(?,?,?,?)",
+                    (headword, headword, headword, "名詞"),
+                ).lastrowid
+                db.execute(
+                    "INSERT INTO meanings(entry_id,language,meaning_number,definition) VALUES(?, 'ja', 1, ?)",
+                    (entry_id, f"{label} match"),
+                )
+                db.execute(
+                    "INSERT INTO entry_workflow(entry_id,publication_status) VALUES(?,'published')",
+                    (entry_id,),
+                )
+                entry_ids[label] = entry_id
+            rebuild_search_index(db)
+            db.commit()
+
+            ranked_ids = [
+                row["id"]
+                for row in search_entries(db, "zqx", "ja", "headword", "contains")
+                if row["id"] in entry_ids.values()
+            ]
+
+        self.assertEqual(ranked_ids, [
+            entry_ids["exact"],
+            entry_ids["prefix"],
+            entry_ids["suffix"],
+            entry_ids["contains"],
+        ])
+
+        response = self.client.get("/?language=ja&q=zqx&type=headword&match=contains")
+        self.assertEqual(response.status_code, 200)
+        result_positions = [
+            response.data.index(f"/word/{entry_ids[label]}-".encode())
+            for label in ("exact", "prefix", "suffix", "contains")
+        ]
+        self.assertEqual(result_positions, sorted(result_positions))
+
+        detail = self.client.get(
+            f"/word/{entry_ids['exact']}?language=ja&q=zqx&type=headword&match=contains"
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn(
+            b'href="/?language=ja&amp;q=zqx&amp;type=headword&amp;match=contains#results"',
+            detail.data,
+        )
 
     def test_unpublished_draft_has_no_public_url(self):
         entry_id=self.create_draft()

@@ -46,12 +46,33 @@ def search_entries(db, query, language="ja", search_type="headword", match="cont
         "headword": ("s.normalized_headword","s.normalized_kana","s.normalized_ipa","s.normalized_definition"),
         "examples": ("s.normalized_examples",), "conjugation": ("s.normalized_conjugations",),
     }.get(search_type, ("s.normalized_headword","s.normalized_kana","s.normalized_definition","s.normalized_examples"))
-    where = " OR ".join(f"{column} LIKE ?" for column in columns)
-    params = [language, *([pattern] * len(columns)), limit]
+    where = " OR ".join(f"{column} LIKE :pattern" for column in columns)
+    rank_terms = [
+        f"""CASE
+          WHEN {column} = :exact THEN {index}
+          WHEN {column} LIKE :prefix THEN {10 + index}
+          WHEN {column} LIKE :suffix THEN {20 + index}
+          WHEN {column} LIKE :contains THEN {30 + index}
+          ELSE 100
+        END"""
+        for index, column in enumerate(columns)
+    ]
+    relevance = rank_terms[0] if len(rank_terms) == 1 else f"MIN({','.join(rank_terms)})"
     return db.execute(f"""
       SELECT DISTINCT e.id,e.headword,e.kana,e.ipa,e.pos,
-        COALESCE((SELECT definition FROM meanings WHERE entry_id=e.id AND language=? ORDER BY meaning_number LIMIT 1),
-                 (SELECT definition FROM meanings WHERE entry_id=e.id AND language='ja' ORDER BY meaning_number LIMIT 1)) definition
+        COALESCE((SELECT definition FROM meanings WHERE entry_id=e.id AND language=:language ORDER BY meaning_number LIMIT 1),
+                 (SELECT definition FROM meanings WHERE entry_id=e.id AND language='ja' ORDER BY meaning_number LIMIT 1)) definition,
+        {relevance} relevance
       FROM entry_search_index s JOIN entries e ON e.id=s.entry_id JOIN entry_workflow w ON w.entry_id=e.id
-      WHERE s.language=? AND w.publication_status='published' AND ({where}) ORDER BY e.headword LIMIT ?
-    """, [language, *params]).fetchall()
+      WHERE s.language=:language AND w.publication_status='published' AND ({where})
+      ORDER BY relevance, LENGTH(e.headword), e.headword
+      LIMIT :limit
+    """, {
+        "language": language,
+        "pattern": pattern,
+        "exact": q,
+        "prefix": q + "%",
+        "suffix": "%" + q,
+        "contains": "%" + q + "%",
+        "limit": limit,
+    }).fetchall()
