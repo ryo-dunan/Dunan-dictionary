@@ -46,13 +46,27 @@ def search_entries(db, query, language="ja", search_type="headword", match="cont
         "headword": ("s.normalized_headword","s.normalized_kana","s.normalized_ipa","s.normalized_definition"),
         "examples": ("s.normalized_examples",), "conjugation": ("s.normalized_conjugations",),
     }.get(search_type, ("s.normalized_headword","s.normalized_kana","s.normalized_definition","s.normalized_examples"))
-    where = " OR ".join(f"{column} LIKE :pattern" for column in columns)
+    where_terms = [f"{column} LIKE :pattern" for column in columns]
+    stem_columns = [
+        column for column in columns
+        if column in ("s.normalized_headword", "s.normalized_kana")
+    ] if match != "suffix" else []
+    stem_conditions = [
+        f"""(
+          SUBSTR({column}, -1) = '-'
+          AND LENGTH({column}) >= 4
+          AND :exact LIKE SUBSTR({column}, 1, LENGTH({column}) - 1) || '%'
+        )"""
+        for column in stem_columns
+    ]
+    where = " OR ".join(where_terms + stem_conditions)
     rank_terms = [
         f"""CASE
           WHEN {column} = :exact THEN {index}
           WHEN {column} LIKE :prefix THEN {10 + index}
           WHEN {column} LIKE :suffix THEN {20 + index}
           WHEN {column} LIKE :contains THEN {30 + index}
+          {f"WHEN {stem_conditions[stem_columns.index(column)]} THEN {40 + index}" if column in stem_columns else ""}
           ELSE 100
         END"""
         for index, column in enumerate(columns)
