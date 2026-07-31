@@ -1,7 +1,7 @@
 UI_TRANSLATIONS = {
     "ja": {
         "meta_description": "与那国語の語彙・例文・音声・資料を検索できる研究辞書",
-        "brand_subtitle": "与那国語オンライン辞書", "language_nav": "表示言語", "footer": "与那国語オンライン辞書 — 研究・継承・共有のために",
+        "brand_subtitle": "与那国語オンライン辞書", "language_nav": "表示言語", "about": "この辞書について", "footer": "与那国語オンライン辞書 — 研究・継承・共有のために",
         "hero_eyebrow": "YONAGUNI LANGUAGE DICTIONARY", "hero_title": "ことばから、島の記憶へ。", "hero_description": "見出し語、読み、IPA、意味、例文、活用形を横断して検索できます。",
         "search_term": "検索語", "search_placeholder": "与那国語または日本語を入力", "search": "検索", "target": "対象", "target_headword": "見出し語・読み・IPA・意味", "target_all": "すべて", "target_examples": "例文・翻訳", "target_conjugation": "活用形",
         "match": "一致方法", "contains": "部分一致", "prefix": "前方一致", "suffix": "後方一致", "results_for": "「{query}」の検索結果", "result_count": "{count}件", "pos_unknown": "品詞未確認", "meaning_pending": "意味を点検中", "no_results": "該当する語彙がありません", "no_results_help": "表記を変えるか、一致方法を「部分一致」にしてお試しください。",
@@ -12,7 +12,7 @@ UI_TRANSLATIONS = {
     },
     "en": {
         "meta_description": "A research dictionary for searching Yonaguni words, examples, audio, and sources.",
-        "brand_subtitle": "Yonaguni Language Online Dictionary", "language_nav": "Display language", "footer": "Yonaguni Language Online Dictionary — for research, transmission, and sharing",
+        "brand_subtitle": "Yonaguni Language Online Dictionary", "language_nav": "Display language", "about": "About this dictionary", "footer": "Yonaguni Language Online Dictionary — for research, transmission, and sharing",
         "hero_eyebrow": "YONAGUNI LANGUAGE DICTIONARY", "hero_title": "From words to the island’s memory.", "hero_description": "Search across headwords, readings, IPA, meanings, examples, and conjugated forms.",
         "search_term": "Search term", "search_placeholder": "Enter a Yonaguni, English, or Japanese term", "search": "Search", "target": "Search in", "target_headword": "Headword, reading, IPA, and meaning", "target_all": "Everything", "target_examples": "Examples and translations", "target_conjugation": "Conjugated forms",
         "match": "Match type", "contains": "Contains", "prefix": "Starts with", "suffix": "Ends with", "results_for": "Results for “{query}”", "result_count": "{count} results", "pos_unknown": "Part of speech unverified", "meaning_pending": "Meaning under review", "no_results": "No matching entries", "no_results_help": "Try another spelling or select “Contains.”",
@@ -23,7 +23,7 @@ UI_TRANSLATIONS = {
     },
     "zh-tw": {
         "meta_description": "可搜尋與那國語詞彙、例句、音訊與文獻來源的研究辭典。",
-        "brand_subtitle": "與那國語線上辭典", "language_nav": "顯示語言", "footer": "與那國語線上辭典 — 用於研究、傳承與共享",
+        "brand_subtitle": "與那國語線上辭典", "language_nav": "顯示語言", "about": "關於本辭典", "footer": "與那國語線上辭典 — 用於研究、傳承與共享",
         "hero_eyebrow": "YONAGUNI LANGUAGE DICTIONARY", "hero_title": "從語言，走向島嶼的記憶。", "hero_description": "可跨詞條、讀音、IPA、詞義、例句與活用形進行搜尋。",
         "search_term": "搜尋詞", "search_placeholder": "輸入與那國語、中文或日文", "search": "搜尋", "target": "搜尋範圍", "target_headword": "詞條、讀音、IPA與詞義", "target_all": "全部", "target_examples": "例句與翻譯", "target_conjugation": "活用形",
         "match": "比對方式", "contains": "部分一致", "prefix": "前方一致", "suffix": "後方一致", "results_for": "「{query}」的搜尋結果", "result_count": "{count}筆", "pos_unknown": "詞類尚未確認", "meaning_pending": "詞義確認中", "no_results": "找不到符合的詞條", "no_results_help": "請嘗試其他拼法，或選擇「部分一致」。",

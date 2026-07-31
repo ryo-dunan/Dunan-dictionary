@@ -36,6 +36,19 @@ def index():
                            ui=public_ui(language), language_urls=language_urls())
 
 
+@bp.get("/about")
+def about():
+    language = request.args.get("language", "ja")
+    if language not in ("ja", "en", "zh-tw", "yonaguni"):
+        language = "ja"
+    return render_template(
+        "public/about.html",
+        language=language,
+        ui=public_ui(language),
+        language_urls=language_urls(),
+    )
+
+
 @bp.get("/word/<int:entry_id>")
 @bp.get("/word/<int:entry_id>-<slug>")
 def entry(entry_id, slug=None):

@@ -327,7 +327,8 @@ class V2AppTest(unittest.TestCase):
     def test_main_pages_render_without_internal_errors(self):
         self.login()
         for path in ("/v2/admin", "/v2/entries", "/v2/tasks", "/v2/sources", "/v2/admin-tools",
-                     "/v2/admin-tools/history", "/v2/admin-tools/import", "/v2/admin-tools/quarantine", "/", "/sw.js"):
+                     "/v2/admin-tools/history", "/v2/admin-tools/import", "/v2/admin-tools/quarantine",
+                     "/", "/about", "/sw.js"):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
