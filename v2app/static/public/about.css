@@ -1,27 +1,15 @@
-.public-nav .brand {
-  flex: 0 0 auto;
-}
-
-.public-nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  margin-left: auto;
-}
-
-.about-nav-link {
-  padding-left: 22px;
-  border-left: 1px solid rgba(21, 53, 60, 0.18);
+.footer-about-link {
   color: var(--ocean);
-  font-size: 0.85rem;
-  font-weight: 750;
-  text-decoration: none;
   white-space: nowrap;
 }
 
-.about-nav-link[aria-current="page"] {
-  text-decoration: underline;
-  text-underline-offset: 5px;
+.footer-about-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.footer-divider {
+  margin: 0 5px;
+  color: rgba(21, 53, 60, 0.35);
 }
 
 .about-page {
@@ -68,18 +56,9 @@
 }
 
 @media (max-width: 720px) {
-  .public-nav-actions {
-    display: grid;
-    gap: 10px;
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .about-nav-link {
-    justify-self: start;
-    padding-left: 0;
-    border-left: 0;
-    text-align: left;
+  .site-credit {
+    display: block;
+    line-height: 1.9;
   }
 
   .about-hero {
