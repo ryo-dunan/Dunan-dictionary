@@ -236,6 +236,37 @@ class V2AppTest(unittest.TestCase):
             detail.data,
         )
 
+    def test_hyphenated_stem_matches_inflected_query_after_direct_match(self):
+        with self.app.app_context():
+            from v2app.db import get_db
+
+            db = get_db()
+            entry_ids = []
+            for headword in ("zqstemrun", "zQstem-"):
+                entry_id = db.execute(
+                    "INSERT INTO entries(headword,kana,ipa,pos) VALUES(?,?,?,?)",
+                    (headword, headword, headword, "動詞"),
+                ).lastrowid
+                db.execute(
+                    "INSERT INTO meanings(entry_id,language,meaning_number,definition) VALUES(?, 'ja', 1, '語幹検索テスト')",
+                    (entry_id,),
+                )
+                db.execute(
+                    "INSERT INTO entry_workflow(entry_id,publication_status) VALUES(?,'published')",
+                    (entry_id,),
+                )
+                entry_ids.append(entry_id)
+            rebuild_search_index(db)
+            db.commit()
+
+            ranked_ids = [
+                row["id"]
+                for row in search_entries(db, "ZQSTEMRUN", "ja", "headword", "contains")
+                if row["id"] in entry_ids
+            ]
+
+        self.assertEqual(ranked_ids, entry_ids)
+
     def test_unpublished_draft_has_no_public_url(self):
         entry_id=self.create_draft()
         self.assertEqual(self.client.get(f"/word/{entry_id}").status_code,404)
