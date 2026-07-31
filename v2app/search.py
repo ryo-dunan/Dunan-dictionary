@@ -49,28 +49,31 @@ def search_entries(db, query, language="ja", search_type="headword", match="cont
     where_terms = [f"{column} LIKE :pattern" for column in columns]
     stem_columns = [
         column for column in columns
-        if column in ("s.normalized_headword", "s.normalized_kana")
+        if column in ("s.normalized_headword", "s.normalized_kana", "s.normalized_ipa")
     ] if match != "suffix" else []
-    stem_conditions = [
-        f"""(
-          SUBSTR({column}, -1) = '-'
-          AND LENGTH({column}) >= 4
-          AND :exact LIKE SUBSTR({column}, 1, LENGTH({column}) - 1) || '%'
+    stem_conditions = {}
+    for column in stem_columns:
+        stem_value = f"TRIM({column}, '[]')"
+        stem_conditions[column] = f"""(
+          SUBSTR({stem_value}, -1) = '-'
+          AND LENGTH({stem_value}) >= 4
+          AND :exact LIKE SUBSTR({stem_value}, 1, LENGTH({stem_value}) - 1) || '%'
         )"""
-        for column in stem_columns
-    ]
-    where = " OR ".join(where_terms + stem_conditions)
-    rank_terms = [
-        f"""CASE
+    where = " OR ".join(where_terms + list(stem_conditions.values()))
+    rank_terms = []
+    for index, column in enumerate(columns):
+        stem_rank = (
+            f"WHEN {stem_conditions[column]} THEN {40 + index}"
+            if column in stem_conditions else ""
+        )
+        rank_terms.append(f"""CASE
           WHEN {column} = :exact THEN {index}
           WHEN {column} LIKE :prefix THEN {10 + index}
           WHEN {column} LIKE :suffix THEN {20 + index}
           WHEN {column} LIKE :contains THEN {30 + index}
-          {f"WHEN {stem_conditions[stem_columns.index(column)]} THEN {40 + index}" if column in stem_columns else ""}
+          {stem_rank}
           ELSE 100
-        END"""
-        for index, column in enumerate(columns)
-    ]
+        END""")
     relevance = rank_terms[0] if len(rank_terms) == 1 else f"MIN({','.join(rank_terms)})"
     return db.execute(f"""
       SELECT DISTINCT e.id,e.headword,e.kana,e.ipa,e.pos,
