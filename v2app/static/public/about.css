@@ -1,9 +1,22 @@
-.about-nav-link {
+.public-nav .brand {
+  flex: 0 0 auto;
+}
+
+.public-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 22px;
   margin-left: auto;
+}
+
+.about-nav-link {
+  padding-left: 22px;
+  border-left: 1px solid rgba(21, 53, 60, 0.18);
   color: var(--ocean);
   font-size: 0.85rem;
   font-weight: 750;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .about-nav-link[aria-current="page"] {
@@ -55,9 +68,18 @@
 }
 
 @media (max-width: 720px) {
+  .public-nav-actions {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    margin-left: 0;
+  }
+
   .about-nav-link {
-    max-width: 7.5em;
-    text-align: right;
+    justify-self: start;
+    padding-left: 0;
+    border-left: 0;
+    text-align: left;
   }
 
   .about-hero {
