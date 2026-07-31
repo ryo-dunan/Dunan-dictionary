@@ -23,11 +23,16 @@ def language_urls():
 def index():
     language = request.args.get("language", "ja")
     if language not in ("ja","en","zh-tw","yonaguni"): language = "ja"
+    search_type = request.args.get("type", "headword")
+    if search_type not in ("headword", "fulltext", "examples", "conjugation"): search_type = "headword"
+    match_mode = request.args.get("match", "contains")
+    if match_mode not in ("contains", "prefix", "suffix"): match_mode = "contains"
     query = request.args.get("q", "").strip(); results = []
     if query:
         results = search_entries(get_db(), query, "ja" if language=="yonaguni" else language,
-                                 request.args.get("type", "headword"), request.args.get("match", "contains"))
+                                 search_type, match_mode)
     return render_template("public/index.html", query=query, results=results, language=language,
+                           search_type=search_type, match_mode=match_mode,
                            ui=public_ui(language), language_urls=language_urls())
 
 
@@ -37,6 +42,19 @@ def entry(entry_id, slug=None):
     db=get_db(); language=request.args.get("language","ja"); display="ja" if language=="yonaguni" else language
     if language not in ("ja","en","zh-tw","yonaguni"):
         language="ja"; display="ja"
+    search_query = request.args.get("q", "").strip()
+    search_type = request.args.get("type", "headword")
+    if search_type not in ("headword", "fulltext", "examples", "conjugation"): search_type = "headword"
+    match_mode = request.args.get("match", "contains")
+    if match_mode not in ("contains", "prefix", "suffix"): match_mode = "contains"
+    back_url = url_for(
+        "public.index",
+        language=language,
+        q=search_query,
+        type=search_type,
+        match=match_mode,
+        _anchor="results",
+    ) if search_query else url_for("public.index", language=language)
     row=db.execute("SELECT e.* FROM entries e JOIN entry_workflow w ON w.entry_id=e.id WHERE e.id=? AND w.publication_status='published'",(entry_id,)).fetchone()
     if not row: abort(404)
     meanings=db.execute("SELECT meaning_number,definition FROM meanings WHERE entry_id=? AND language=? AND TRIM(COALESCE(definition,''))!='' ORDER BY meaning_number",(entry_id,display)).fetchall()
@@ -70,7 +88,7 @@ def entry(entry_id, slug=None):
     conjugations=db.execute("SELECT form_name,conjugated_form FROM conjugations WHERE entry_id=?",(entry_id,)).fetchall()
     synonyms=db.execute("SELECT synonym FROM synonyms WHERE entry_id=?",(entry_id,)).fetchall()
     has_default_meanings=bool(meanings or synonyms)
-    return render_template("public/entry.html",entry=row,meanings=meanings,examples=examples,source_sections=source_sections,has_default_meanings=has_default_meanings,media=media,conjugations=conjugations,synonyms=synonyms,language=language,fallback=fallback,ui=public_ui(language),language_urls=language_urls())
+    return render_template("public/entry.html",entry=row,meanings=meanings,examples=examples,source_sections=source_sections,has_default_meanings=has_default_meanings,media=media,conjugations=conjugations,synonyms=synonyms,language=language,fallback=fallback,back_url=back_url,ui=public_ui(language),language_urls=language_urls())
 
 
 @bp.get("/media/<path:filename>")
