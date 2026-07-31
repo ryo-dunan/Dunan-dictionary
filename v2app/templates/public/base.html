@@ -19,13 +19,15 @@
   <div class="island-bg" aria-hidden="true"></div>
   <header class="public-nav">
     <a class="brand" href="{{ url_for('public.index',language=language) }}"><span>𓇼</span><strong>どぅなんむぬい辞典</strong><small>{{ ui.brand_subtitle }}</small></a>
-    <a class="about-nav-link" href="{{ url_for('public.about',language=language) }}" {% if request.endpoint=='public.about' %}aria-current="page"{% endif %}>{{ ui.about }}</a>
-    <nav aria-label="{{ ui.language_nav }}">
-      <a href="{{ language_urls.ja }}" {% if language=='ja' %}aria-current="page"{% endif %}>日本語</a>
-      <a href="{{ language_urls.yonaguni }}" {% if language=='yonaguni' %}aria-current="page"{% endif %}>どぅなんむぬい</a>
-      <a href="{{ language_urls.en }}" {% if language=='en' %}aria-current="page"{% endif %}>English</a>
-      <a href="{{ language_urls['zh-tw'] }}" {% if language=='zh-tw' %}aria-current="page"{% endif %}>繁體中文</a>
-    </nav>
+    <div class="public-nav-actions">
+      <nav aria-label="{{ ui.language_nav }}">
+        <a href="{{ language_urls.ja }}" {% if language=='ja' %}aria-current="page"{% endif %}>日本語</a>
+        <a href="{{ language_urls.yonaguni }}" {% if language=='yonaguni' %}aria-current="page"{% endif %}>どぅなんむぬい</a>
+        <a href="{{ language_urls.en }}" {% if language=='en' %}aria-current="page"{% endif %}>English</a>
+        <a href="{{ language_urls['zh-tw'] }}" {% if language=='zh-tw' %}aria-current="page"{% endif %}>繁體中文</a>
+      </nav>
+      <a class="about-nav-link" href="{{ url_for('public.about',language=language) }}" {% if request.endpoint=='public.about' %}aria-current="page"{% endif %}>{{ ui.about }}</a>
+    </div>
   </header>
   <main class="public-shell">{% block content %}{% endblock %}</main>
   <footer>
