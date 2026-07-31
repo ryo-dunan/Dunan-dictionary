@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="{{ url_for('static',filename='public/dictionary-sections.css') }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='public/conjugation-tables.css') }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='public/i18n.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static',filename='public/site-footer.css') }}">
 </head>
 <body>
   <div class="island-bg" aria-hidden="true"></div>
@@ -26,7 +27,25 @@
     </nav>
   </header>
   <main class="public-shell">{% block content %}{% endblock %}</main>
-  <footer>{{ ui.footer }}</footer>
+  <footer class="site-footer" aria-label="版権・制作情報">
+    <div class="site-footer-inner glass">
+      <p class="site-footer-brand">{{ ui.footer }}</p>
+      <dl class="site-credits">
+        <div>
+          <dt>版権 / Copyright</dt>
+          <dd>与那国町教育委員会</dd>
+        </div>
+        <div>
+          <dt>制作 / Creator</dt>
+          <dd>梁為棟（<span lang="en">Weidong Liang</span>）</dd>
+        </div>
+        <div>
+          <dt>所属 / Affiliation</dt>
+          <dd>ヘルシンキ大学（<span lang="en">University of Helsinki</span>）</dd>
+        </div>
+      </dl>
+    </div>
+  </footer>
   <script src="{{ url_for('static',filename='public/register-sw.js') }}" defer></script>
 </body>
 </html>
