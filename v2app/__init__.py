@@ -38,6 +38,7 @@ def create_app(test_config=None):
     from .dashboard import bp as dashboard_bp
     from .editorial import bp as editorial_bp
     from .admin import bp as admin_bp
+    from .research_import import bp as research_import_bp
     from .sources import bp as sources_bp
     from .media import bp as media_bp
     from .public import bp as public_bp
@@ -45,6 +46,7 @@ def create_app(test_config=None):
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(editorial_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(research_import_bp)
     app.register_blueprint(sources_bp)
     app.register_blueprint(media_bp)
     app.register_blueprint(public_bp)
@@ -82,7 +84,7 @@ def create_app(test_config=None):
     def upload_too_large(_error):
         return render_template(
             "v2/error.html",
-            message="ファイルが大きすぎます。16MB以下のDBファイルを選んでください。",
+            message="ファイルが大きすぎます。16MB以下のファイルを選んでください。",
         ), 413
 
     @app.get("/healthz")
