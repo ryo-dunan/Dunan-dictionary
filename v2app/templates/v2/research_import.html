@@ -1,0 +1,127 @@
+{% extends "v2/base.html" %}
+{% block title %}定期調査シートから追加{% endblock %}
+{% block content %}
+<header class="topbar glass">
+  <div><p class="eyebrow">完全管理者</p><h1>定期調査シートから追加</h1></div>
+  <a class="quiet link-button" href="{{ url_for('admin_v2.index') }}">運用管理へ戻る</a>
+</header>
+
+{% for message in get_flashed_messages() %}<div class="notice page-notice">{{ message }}</div>{% endfor %}
+
+{% if not batch %}
+<section class="form-card glass research-upload-card">
+  <h2>毎回同じExcel形式で取り込む</h2>
+  <p class="help">「見出し語・意味・品詞・例文・訳文」などが並ぶ定期調査シート（.xlsx）を選びます。アップロードしただけでは辞書は変わりません。次の画面で、重複候補を見ながら一語ずつ追加方法を確認できます。</p>
+  <form method="post" enctype="multipart/form-data" class="research-upload-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>定期調査のExcelファイル
+      <input type="file" name="research_sheet" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+    </label>
+    <button class="primary">内容と重複候補を確認</button>
+  </form>
+</section>
+<section class="form-card glass">
+  <h2>取り込み後の状態</h2>
+  <ul class="plain-guidance">
+    <li>新しい見出し語は、まず非公開の下書きになります。</li>
+    <li>既存語へ追加する場合も、公開中の内容はすぐには変わりません。</li>
+    <li>必要なら、取り込む全項目を担当者へまとめて精査依頼できます。</li>
+  </ul>
+</section>
+{% elif batch.status == 'preview' %}
+<section class="import-summary glass">
+  <div><span>ファイル</span><strong>{{ batch.original_filename }}</strong></div>
+  <div><span>読取シート</span><strong>{{ payload.sheet_name }}</strong></div>
+  <div><span>見出し語</span><strong>{{ entries|length }}語</strong></div>
+</section>
+{% if payload.warnings %}<section class="notice warning-list"><h2>ファイル全体の確認事項</h2>{% for warning in payload.warnings %}<p>{{ warning }}</p>{% endfor %}</section>{% endif %}
+
+<form method="post" action="{{ url_for('research_import.apply', batch_id=batch.id) }}" class="research-preview-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="research-entry-list">
+  {% for item in entries %}
+    {% set imported = item.imported %}
+    <article class="research-entry-card glass{% if item.candidates %} has-candidates{% endif %}">
+      <div class="research-entry-heading">
+        <div><p class="eyebrow">Excel行 {{ imported.row_numbers|join(', ') }}</p><h2>{{ loop.index }}. {{ imported.headword }}</h2></div>
+        <span class="status-pill">{{ imported.pos or '品詞未入力' }}</span>
+      </div>
+
+      <div class="imported-content-grid">
+        <section><h3>シートの意味</h3>{% if imported.meanings.ja %}<ol>{% for meaning in imported.meanings.ja %}<li>{{ meaning }}</li>{% endfor %}</ol>{% else %}<p class="muted">意味は空欄です。</p>{% endif %}</section>
+        <section><h3>シートの例文</h3>{% if imported.examples %}<ol>{% for example in imported.examples %}<li><span lang="yoi">{{ example.yonaguni }}</span>{% if example.translations.ja.free_translation %}<small>{{ example.translations.ja.free_translation }}</small>{% endif %}</li>{% endfor %}</ol>{% else %}<p class="muted">例文はありません。</p>{% endif %}</section>
+      </div>
+
+      {% if imported.warnings %}<div class="entry-warnings">{% for warning in imported.warnings %}<p>{{ warning }}</p>{% endfor %}</div>{% endif %}
+
+      <fieldset class="import-decision">
+        <legend>この見出し語をどうするか</legend>
+        <label class="decision-option"><input type="radio" name="action_{{ item.index }}" value="new"{% if item.default_action == 'new' %} checked{% endif %}> <span><strong>新しい見出し語として追加</strong><small>非公開の下書きを新規作成します。</small></span></label>
+        <label class="decision-option{% if not item.can_merge %} unavailable{% endif %}"><input type="radio" name="action_{{ item.index }}" value="merge"{% if item.default_action == 'merge' %} checked{% endif %}{% if not item.can_merge %} disabled{% endif %}> <span><strong>既存の見出し語へ内容を追加</strong><small>意味・例文・調査記録を、既存内容を消さずに下書きへ足します。</small></span></label>
+        {% if item.can_merge %}
+        <label class="candidate-select-label">追加先
+          <select name="target_{{ item.index }}">
+            {% for candidate in item.candidates %}<option value="{{ candidate.id }}"{% if candidate.id == item.default_target %} selected{% endif %}{% if candidate.merge_blocked %} disabled{% endif %}>{{ candidate.headword }}{% if candidate.kana %}（{{ candidate.kana }}）{% endif %} — {{ candidate.reasons|join('・') }}{% if candidate.merge_blocked %} / 作業中のため選択不可{% endif %}</option>{% endfor %}
+          </select>
+        </label>
+        {% endif %}
+        <label class="decision-option"><input type="radio" name="action_{{ item.index }}" value="skip"> <span><strong>今回は取り込まない</strong><small>この見出し語だけ何も変更しません。</small></span></label>
+      </fieldset>
+
+      {% if item.candidates %}
+      <details class="candidate-details"{% if item.default_action == 'merge' %} open{% endif %}>
+        <summary>重複・類似候補 {{ item.candidates|length }}件を比較</summary>
+        <div class="candidate-list">
+        {% for candidate in item.candidates %}
+          <article class="candidate-item{% if candidate.exact %} exact{% endif %}">
+            <div><a href="{{ url_for('editorial.edit_entry', entry_id=candidate.id) }}" target="_blank" rel="noopener">{{ candidate.headword }}</a>{% if candidate.kana %}<span>{{ candidate.kana }}</span>{% endif %}</div>
+            <p>{{ candidate.reasons|join('・') }} / {{ candidate.pos or '品詞未確認' }} / {{ '公開中' if candidate.publication_status == 'published' else '非公開' }}</p>
+            {% if candidate.meanings %}<ol>{% for meaning in candidate.meanings %}<li>{{ meaning }}</li>{% endfor %}</ol>{% else %}<p class="muted">既存の日本語意味は空欄です。</p>{% endif %}
+            {% if candidate.examples %}<div class="candidate-examples"><strong>既存の例文</strong>{% for example in candidate.examples %}<span lang="yoi">{{ example }}</span>{% endfor %}</div>{% endif %}
+            {% if candidate.merge_blocked %}<p class="blocked-note">{{ candidate.blocked_reason }}。内容を確認するだけにして、今は統合できません。</p>{% endif %}
+          </article>
+        {% endfor %}
+        </div>
+      </details>
+      {% else %}<p class="no-candidate">近い既存語は見つかりませんでした。</p>{% endif %}
+    </article>
+  {% endfor %}
+  </div>
+
+  <section class="batch-review-card glass">
+    <div><p class="eyebrow">最後の設定</p><h2>取り込んだ項目を一括で精査依頼</h2><p class="help">依頼しない場合は管理者の下書きとして残ります。「均等に依頼」では、現在の確認待ち件数が少ない人から順に自動配分します。</p></div>
+    <label>精査の依頼先
+      <select name="reviewer_mode">
+        <option value="none">今は依頼しない（下書きにする）</option>
+        {% if reviewers %}<option value="balanced">担当者へ均等に依頼</option>{% endif %}
+        {% for reviewer in reviewers %}<option value="{{ reviewer.id }}">{{ reviewer.display_name }}さんへ全件依頼（現在{{ reviewer.pending_count }}件待ち）</option>{% endfor %}
+      </select>
+    </label>
+    <button class="primary wide-action">選んだ内容で下書きを作成</button>
+    <p class="final-caution">この操作では公開されません。精査依頼を選んだ項目は、担当者が承認した時点で公開されます。</p>
+  </section>
+</form>
+<form method="post" action="{{ url_for('research_import.cancel', batch_id=batch.id) }}" class="cancel-import-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="quiet">この取込を取り消す</button>
+</form>
+{% elif batch.status == 'applied' %}
+<section class="form-card glass import-result">
+  <p class="eyebrow">処理完了</p><h1>{{ batch.original_filename }}</h1>
+  {% if result %}
+  <div class="result-counts">
+    <span>新規 <strong>{{ result.created|length }}</strong></span>
+    <span>既存へ追加 <strong>{{ result.merged|length }}</strong></span>
+    <span>精査依頼 <strong>{{ result.review_requests|length }}</strong></span>
+    <span>除外 <strong>{{ result.skipped|length }}</strong></span>
+  </div>
+  {% if result.created %}<h2>新しい下書き</h2><ul>{% for item in result.created %}<li><a href="{{ url_for('editorial.edit_entry', entry_id=item.entry_id) }}">{{ item.headword }}</a></li>{% endfor %}</ul>{% endif %}
+  {% if result.merged %}<h2>既存語へ追加した下書き</h2><ul>{% for item in result.merged %}<li><a href="{{ url_for('editorial.edit_entry', entry_id=item.entry_id) }}">{{ item.headword }}</a> ← {{ item.imported_headwords|join('、') }}</li>{% endfor %}</ul>{% endif %}
+  {% if result.review_requests %}<h2>送信した精査依頼</h2><ul>{% for item in result.review_requests %}<li>{{ item.headword }} → {{ item.reviewer_name }}さん</li>{% endfor %}</ul>{% endif %}
+  {% if result.errors %}<div class="entry-warnings"><h2>処理できなかった項目</h2>{% for item in result.errors %}<p>{{ item.headword }}: {{ item.message }}</p>{% endfor %}</div>{% endif %}
+  {% endif %}
+  <div class="result-actions"><a class="primary link-button" href="{{ url_for('research_import.upload') }}">次の調査シートを取り込む</a><a class="quiet link-button" href="{{ url_for('editorial.tasks') }}">精査・下書きを確認</a></div>
+</section>
+{% else %}
+<section class="form-card glass import-result"><p class="eyebrow">取込取消済み</p><h1>{{ batch.original_filename }}</h1><p>この取込では辞書データを変更していません。</p><a class="primary link-button" href="{{ url_for('research_import.upload') }}">別の調査シートを取り込む</a></section>
+{% endif %}
+{% endblock %}

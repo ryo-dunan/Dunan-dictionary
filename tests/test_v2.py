@@ -1,7 +1,11 @@
+import io
+import json
 import sqlite3
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from werkzeug.security import generate_password_hash
 from werkzeug.datastructures import MultiDict
@@ -9,9 +13,64 @@ from werkzeug.datastructures import MultiDict
 from v2app import create_app
 from scripts.upgrade_v2 import apply_upgrades
 from v2app.search import normalize, rebuild_search_index, search_entries
+from v2app.research_sheet import parse_research_workbook
 from v2app.workflow import snapshot_from_form
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def research_workbook(rows):
+    """Build the small, fixed-format XLSX used by importer tests."""
+    all_rows = [["№", "見出し語", "意味・内容", "品詞", "その語を今も使うか", "例文", "訳文", "ソース", "精査日", "音声"]] + rows
+    row_xml = []
+    shared_strings = []
+    for row_number, values in enumerate(all_rows, 1):
+        cells = []
+        for index, value in enumerate(values):
+            if value in (None, ""):
+                continue
+            column = chr(ord("A") + index)
+            if isinstance(value, tuple) and value[0] == "phonetic":
+                shared_index = len(shared_strings)
+                shared_strings.append(
+                    f'<si><t>{escape(value[1])}</t><rPh sb="0" eb="1"><t>{escape(value[2])}</t></rPh></si>'
+                )
+                cells.append(f'<c r="{column}{row_number}" t="s"><v>{shared_index}</v></c>')
+            else:
+                cells.append(
+                    f'<c r="{column}{row_number}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>'
+                )
+        row_xml.append(f'<row r="{row_number}">{"".join(cells)}</row>')
+    worksheet = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<sheetData>{"".join(row_xml)}</sheetData></worksheet>'
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets><sheet name="№3" sheetId="1" r:id="rId1"/></sheets></workbook>'
+    )
+    relationships = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        'Target="worksheets/sheet1.xml"/></Relationships>'
+    )
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("xl/workbook.xml", workbook)
+        archive.writestr("xl/_rels/workbook.xml.rels", relationships)
+        archive.writestr("xl/worksheets/sheet1.xml", worksheet)
+        if shared_strings:
+            archive.writestr(
+                "xl/sharedStrings.xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                + "".join(shared_strings) + "</sst>",
+            )
+    return output.getvalue()
 
 
 class V2AppTest(unittest.TestCase):
@@ -164,6 +223,109 @@ class V2AppTest(unittest.TestCase):
         self.assertEqual(examples[0]["translations"]["en"]["free_translation"], "first")
         self.assertEqual(examples[1]["translations"]["ja"]["word_by_word"], "二-逐語")
         self.assertEqual(examples[1]["translations"]["zh-tw"]["free_translation"], "第二句")
+
+    def test_research_workbook_groups_repeated_headwords_and_ditto_meaning(self):
+        workbook = research_workbook([
+            [1, "すい", ("phonetic", "水", "ミズ"), "名詞メイシ", "使う", "例文一", "（一つ目の訳）", "調査", "2026-08-01", ""],
+            [2, "すい", "〃", "名詞メイシ", "", "例文二", "二つ目の訳", "", "", ""],
+            [3, "すーあったに", "急に゜", "慣用句カンヨウク", "", "", "", "", "", ""],
+        ])
+        parsed = parse_research_workbook(workbook, "毎週調査.xlsx")
+        self.assertEqual(parsed["sheet_name"], "№3")
+        self.assertEqual(len(parsed["entries"]), 2)
+        entry = parsed["entries"][0]
+        self.assertEqual(entry["headword"], "すい")
+        self.assertEqual(entry["pos"], "名詞")
+        self.assertEqual(entry["meanings"]["ja"], ["水"])
+        self.assertEqual(len(entry["examples"]), 2)
+        self.assertEqual(entry["examples"][0]["translations"]["ja"]["free_translation"], "一つ目の訳")
+        self.assertIn("毎週調査.xlsx", entry["supplemental_note"])
+        self.assertEqual(parsed["entries"][1]["pos"], "連語")
+        self.assertEqual(parsed["entries"][1]["meanings"]["ja"], ["急に゜"])
+
+    def test_research_sheet_import_can_merge_create_and_send_batch_review(self):
+        self.login()
+        with sqlite3.connect(self.database) as db:
+            admin_id = db.execute("SELECT id FROM users WHERE username='admin'").fetchone()[0]
+            reviewer_id = db.execute("SELECT id FROM users WHERE username='reviewer'").fetchone()[0]
+            existing_id = db.execute(
+                "INSERT INTO entries(headword,pos) VALUES('zz調査','名詞') RETURNING id"
+            ).fetchone()[0]
+            db.execute(
+                "INSERT INTO meanings(entry_id,language,meaning_number,definition) VALUES(?,'ja',1,'既存の意味')",
+                (existing_id,),
+            )
+            db.execute(
+                "INSERT INTO entry_workflow(entry_id,publication_status,workflow_status,created_by) "
+                "VALUES(?,'published','verified',?)",
+                (existing_id, admin_id),
+            )
+            db.commit()
+        workbook = research_workbook([
+            [1, "zz調査", "追加する意味", "名詞", "", "zz例文", "追加の訳", "", "", ""],
+            [2, "zz新語", "新しい意味", "動詞", "", "zz新語ぬ例文", "新語の訳", "", "", ""],
+        ])
+        response = self.client.post(
+            "/v2/admin-tools/research-sheet",
+            data={
+                "csrf_token": self.csrf(),
+                "research_sheet": (io.BytesIO(workbook), "weekly.xlsx"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 302)
+        batch_id = int(response.location.rstrip("/").split("/")[-1])
+        preview = self.client.get(response.location)
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn("見出し語が完全一致".encode(), preview.data)
+        self.assertIn("一括で精査依頼".encode(), preview.data)
+
+        applied = self.client.post(
+            f"/v2/admin-tools/research-sheet/{batch_id}/apply",
+            data={
+                "csrf_token": self.csrf(),
+                "action_0": "merge",
+                "target_0": str(existing_id),
+                "action_1": "new",
+                "reviewer_mode": str(reviewer_id),
+            },
+        )
+        self.assertEqual(applied.status_code, 302)
+        result_page = self.client.get(applied.location)
+        self.assertEqual(result_page.status_code, 200)
+        self.assertIn("処理完了".encode(), result_page.data)
+        with sqlite3.connect(self.database) as db:
+            self.assertEqual(
+                db.execute(
+                    "SELECT definition FROM meanings WHERE entry_id=? ORDER BY meaning_number", (existing_id,)
+                ).fetchall(),
+                [("既存の意味",)],
+            )
+            merge_revision = db.execute(
+                "SELECT snapshot_json,status FROM entry_revisions WHERE entry_id=? ORDER BY id DESC LIMIT 1",
+                (existing_id,),
+            ).fetchone()
+            merged_snapshot = json.loads(merge_revision[0])
+            self.assertEqual(merged_snapshot["meanings"]["ja"], ["既存の意味", "追加する意味"])
+            self.assertEqual(merge_revision[1], "review_requested")
+            new_entry = db.execute("SELECT id FROM entries WHERE headword='zz新語' ORDER BY id DESC LIMIT 1").fetchone()
+            new_state = db.execute(
+                "SELECT publication_status,workflow_status FROM entry_workflow WHERE entry_id=?", new_entry
+            ).fetchone()
+            self.assertEqual(new_state, ("unpublished", "review_requested"))
+            self.assertEqual(
+                db.execute(
+                    "SELECT COUNT(*) FROM review_requests WHERE requester_id=? AND reviewer_id=? AND status='pending'",
+                    (admin_id, reviewer_id),
+                ).fetchone()[0],
+                2,
+            )
+            result = json.loads(
+                db.execute("SELECT result_json FROM import_batches WHERE id=?", (batch_id,)).fetchone()[0]
+            )
+            self.assertEqual(len(result["created"]), 1)
+            self.assertEqual(len(result["merged"]), 1)
+            self.assertEqual(len(result["review_requests"]), 2)
 
     def test_approved_entry_is_publicly_searchable(self):
         entry_id = self.create_draft()
