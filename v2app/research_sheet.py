@@ -11,6 +11,7 @@ import io
 import re
 import unicodedata
 import zipfile
+from copy import deepcopy
 from collections import OrderedDict, defaultdict
 from difflib import SequenceMatcher
 from pathlib import PurePosixPath
@@ -441,7 +442,7 @@ def _content_ratio(left, right):
 def duplicate_corpus(db):
     """Load existing comparison data once for a whole workbook preview."""
     rows = db.execute(
-        "SELECT e.id,e.headword,e.kana,e.pos,w.publication_status,w.workflow_status,"
+        "SELECT e.id,e.headword,e.kana,e.ipa,e.pos,w.publication_status,w.workflow_status,"
         "EXISTS(SELECT 1 FROM review_requests rr JOIN entry_revisions r ON r.id=rr.revision_id "
         "WHERE r.entry_id=e.id AND rr.status='pending') has_pending_review,"
         "EXISTS(SELECT 1 FROM entry_revisions r WHERE r.entry_id=e.id AND r.status IN ('draft','returned','admin_review')) has_open_draft "
@@ -470,6 +471,55 @@ def duplicate_corpus(db):
         "meaning_keys": [_similarity_text(value) for value in meanings_by_entry[row["id"]]],
         "example_keys": [_similarity_text(value) for value in examples_by_entry[row["id"]]],
     } for row in rows]
+
+
+def manual_merge_targets(db, query, limit=20):
+    """Search every usable entry when the automatic candidates miss a target."""
+    query = (query or "").strip()[:80]
+    query_key = _similarity_text(query)
+    if not query_key:
+        return []
+    matches = []
+    for existing in duplicate_corpus(db):
+        row = existing["row"]
+        searchable = [
+            ("見出し語", _similarity_text(row.get("headword", ""))),
+            ("読み", _similarity_text(row.get("kana", ""))),
+            ("IPA", _similarity_text(row.get("ipa", ""))),
+        ]
+        searchable.extend(("意味", value) for value in existing["meaning_keys"])
+        exact = any(value == query_key for _label, value in searchable if value)
+        prefix = any(value.startswith(query_key) for _label, value in searchable if value)
+        contains = any(query_key in value for _label, value in searchable if value)
+        if not contains:
+            continue
+        matched_fields = []
+        for label, value in searchable:
+            if value and query_key in value and label not in matched_fields:
+                matched_fields.append(label)
+        blocked = bool(
+            row["has_pending_review"]
+            or row["has_open_draft"]
+            or row["workflow_status"] in ("draft", "review_requested", "returned", "admin_review")
+        )
+        matches.append({
+            "id": row["id"],
+            "headword": row["headword"],
+            "kana": row["kana"] or "",
+            "ipa": row["ipa"] or "",
+            "pos": row["pos"] or "",
+            "meanings": existing["meanings"],
+            "publication_status": row["publication_status"] or "unpublished",
+            "workflow_status": row["workflow_status"] or "unreviewed",
+            "merge_blocked": blocked,
+            "blocked_reason": "この語彙は下書き・相互確認中です" if blocked else "",
+            "matched_fields": matched_fields,
+            "_rank": (0 if exact else 1 if prefix else 2, len(_similarity_text(row["headword"])), row["id"]),
+        })
+    matches.sort(key=lambda item: item["_rank"])
+    for item in matches:
+        item.pop("_rank", None)
+    return matches[:limit]
 
 
 def duplicate_candidates(db, imported, limit=5, corpus=None):
@@ -550,7 +600,7 @@ def merge_imported_snapshot(base, imported):
         "synonyms": list(base.get("synonyms", [])),
         "conjugations": list(base.get("conjugations", [])),
         "examples": list(base.get("examples", [])),
-        "source_sections": list(base.get("source_sections", [])),
+        "source_sections": deepcopy(base.get("source_sections", [])),
         "primary_source_id": base.get("primary_source_id"),
     }
     for language, values in imported.get("meanings", {}).items():
@@ -583,6 +633,64 @@ def merge_imported_snapshot(base, imported):
     note = imported.get("supplemental_note", "").strip()
     if note and note not in merged["supplemental_note"]:
         merged["supplemental_note"] = "\n\n".join(filter(None, (merged["supplemental_note"].strip(), note)))
+    return merged
+
+
+def merge_imported_for_source(base, imported, source_id):
+    """Append an import to its dictionary block instead of mixing dictionaries."""
+    if source_id is None or base.get("primary_source_id") == source_id:
+        return merge_imported_snapshot(base, imported)
+
+    merged = deepcopy(base)
+    merged.setdefault("source_sections", [])
+    section = next(
+        (item for item in merged["source_sections"] if item.get("source_id") == source_id),
+        None,
+    )
+    if section is None:
+        section = {
+            "source_id": source_id,
+            "source_headword": imported.get("headword", ""),
+            "locator": "",
+            "meanings": {language: list(values) for language, values in imported.get("meanings", {}).items()},
+            "synonyms": list(imported.get("synonyms", [])),
+            "conjugations": deepcopy(imported.get("conjugations", [])),
+            "examples": deepcopy(imported.get("examples", [])),
+            "etymology": imported.get("etymology", ""),
+            "historical_change": imported.get("historical_change", ""),
+            "note": imported.get("supplemental_note", ""),
+            "legacy_record_ids": [],
+        }
+        merged["source_sections"].append(section)
+        return merged
+
+    section_snapshot = {
+        "headword": section.get("source_headword", ""),
+        "kana": "",
+        "ipa": "",
+        "pos": "",
+        "verb_class": "",
+        "verb_stem": "",
+        "tone": "",
+        "etymology": section.get("etymology", ""),
+        "historical_change": section.get("historical_change", ""),
+        "supplemental_note": section.get("note", ""),
+        "meanings": deepcopy(section.get("meanings", {})),
+        "synonyms": list(section.get("synonyms", [])),
+        "conjugations": deepcopy(section.get("conjugations", [])),
+        "examples": deepcopy(section.get("examples", [])),
+        "source_sections": [],
+        "primary_source_id": None,
+    }
+    combined = merge_imported_snapshot(section_snapshot, imported)
+    section["source_headword"] = section.get("source_headword") or imported.get("headword", "")
+    section["meanings"] = combined["meanings"]
+    section["synonyms"] = combined["synonyms"]
+    section["conjugations"] = combined["conjugations"]
+    section["examples"] = combined["examples"]
+    section["etymology"] = combined["etymology"]
+    section["historical_change"] = combined["historical_change"]
+    section["note"] = combined["supplemental_note"]
     return merged
 
 

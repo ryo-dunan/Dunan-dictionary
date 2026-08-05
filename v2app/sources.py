@@ -38,7 +38,14 @@ def can_edit_entry(db, entry_id):
 @bp.get("")
 @login_required
 def index():
-    rows = get_db().execute("SELECT s.*,COUNT(DISTINCT ss.entry_id) entry_count FROM sources s LEFT JOIN entry_source_sections ss ON ss.source_id=s.id WHERE s.is_active=1 OR ?='admin' GROUP BY s.id ORDER BY s.is_active DESC,s.name",(session.get("role"),)).fetchall()
+    rows = get_db().execute(
+        "WITH linked AS (SELECT source_id,entry_id FROM entry_source_sections "
+        "UNION SELECT source_id,entry_id FROM entry_primary_sources) "
+        "SELECT s.*,COUNT(DISTINCT linked.entry_id) entry_count FROM sources s "
+        "LEFT JOIN linked ON linked.source_id=s.id WHERE s.is_active=1 OR ?='admin' "
+        "GROUP BY s.id ORDER BY s.is_active DESC,s.name",
+        (session.get("role"),),
+    ).fetchall()
     return render_template("v2/sources.html", sources=rows, csrf_token=csrf_token())
 
 
@@ -49,8 +56,8 @@ def create():
     if not name or not bibliography:
         flash("資料名と完全な書誌情報を入力してください。")
     else:
-        db = get_db(); db.execute("INSERT INTO sources(name,abbreviation,bibliography,url,source_type) VALUES(?,?,?,?,?)",
-            (name, request.form.get("abbreviation", "").strip(), bibliography, request.form.get("url", "").strip(), request.form.get("source_type", "").strip())); db.commit(); flash("資料を登録しました。")
+        db = get_db(); db.execute("INSERT INTO sources(name,abbreviation,bibliography,url,source_type,show_on_public) VALUES(?,?,?,?,?,?)",
+            (name, request.form.get("abbreviation", "").strip(), bibliography, request.form.get("url", "").strip(), request.form.get("source_type", "").strip(), 0 if request.form.get("show_on_public", "1") == "0" else 1)); db.commit(); flash("資料を登録しました。")
     return redirect(url_for("sources.index"))
 
 
@@ -63,7 +70,7 @@ def edit_source(source_id):
         name=request.form.get("name","").strip(); bibliography=request.form.get("bibliography","").strip()
         if not name or not bibliography: flash("資料名と完全な書誌情報を入力してください。")
         else:
-            db.execute("UPDATE sources SET name=?,abbreviation=?,bibliography=?,url=?,source_type=? WHERE id=?",(name,request.form.get("abbreviation","").strip(),bibliography,request.form.get("url","").strip(),request.form.get("source_type","").strip(),source_id)); db.commit(); flash("資料情報を更新しました。"); return redirect(url_for("sources.index"))
+            db.execute("UPDATE sources SET name=?,abbreviation=?,bibliography=?,url=?,source_type=?,show_on_public=? WHERE id=?",(name,request.form.get("abbreviation","").strip(),bibliography,request.form.get("url","").strip(),request.form.get("source_type","").strip(),0 if request.form.get("show_on_public", "1") == "0" else 1,source_id)); db.commit(); flash("資料情報を更新しました。"); return redirect(url_for("sources.index"))
     return render_template("v2/source_edit.html",source=source,csrf_token=csrf_token())
 
 

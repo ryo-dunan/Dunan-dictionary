@@ -2,7 +2,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, session, url_for
 
 from .auth import role_required
 from .db import get_db
@@ -11,7 +11,8 @@ from .research_sheet import (
     duplicate_candidates,
     duplicate_corpus,
     existing_snapshot_for_merge,
-    merge_imported_snapshot,
+    manual_merge_targets,
+    merge_imported_for_source,
     parse_research_workbook,
 )
 from .security import csrf_token
@@ -23,8 +24,8 @@ MAX_IMPORT_ENTRIES = 300
 
 def _batch(db, batch_id):
     row = db.execute(
-        "SELECT * FROM import_batches WHERE id=? AND created_by=?",
-        (batch_id, session["user_id"]),
+        "SELECT * FROM import_batches WHERE id=?",
+        (batch_id,),
     ).fetchone()
     if not row:
         abort(404)
@@ -35,6 +36,29 @@ def _batch(db, batch_id):
     if not isinstance(payload, dict) or payload.get("kind") != "research_sheet":
         abort(404)
     return row, payload
+
+
+def _sources(db):
+    return db.execute(
+        "SELECT id,name,abbreviation,bibliography,show_on_public FROM sources WHERE is_active=1 ORDER BY name,id"
+    ).fetchall()
+
+
+def _selected_source(db):
+    raw_source_id = request.form.get("source_id", "").strip()
+    if not raw_source_id:
+        return None, None
+    try:
+        source_id = int(raw_source_id)
+    except (TypeError, ValueError) as error:
+        raise ResearchSheetError("出典を選び直してください。") from error
+    source = db.execute(
+        "SELECT id,name,abbreviation,show_on_public FROM sources WHERE id=? AND is_active=1",
+        (source_id,),
+    ).fetchone()
+    if not source:
+        raise ResearchSheetError("選択した出典を利用できません。出典を選び直してください。")
+    return source_id, source
 
 
 def _reviewers(db):
@@ -134,7 +158,69 @@ def preview(batch_id):
         payload=payload,
         entries=entries,
         reviewers=_reviewers(db),
+        sources=_sources(db),
         result=result,
+        csrf_token=csrf_token(),
+    )
+
+
+@bp.get("/search-targets")
+@role_required("admin")
+def search_targets():
+    return jsonify({"results": manual_merge_targets(get_db(), request.args.get("q", ""))})
+
+
+@bp.get("/history")
+@role_required("admin")
+def history():
+    rows = get_db().execute(
+        "SELECT b.*,u.display_name FROM import_batches b "
+        "JOIN users u ON u.id=b.created_by ORDER BY b.created_at DESC,b.id DESC LIMIT 100"
+    ).fetchall()
+    batches = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(payload, dict) or payload.get("kind") != "research_sheet":
+            continue
+        try:
+            result = json.loads(row["result_json"]) if row["result_json"] else {}
+        except (TypeError, ValueError):
+            result = {}
+        actions = []
+        if row["status"] == "applied":
+            actions.extend({"headword": item.get("headword", ""), "action": "新規下書き", "entry_id": item.get("entry_id")} for item in result.get("created", []))
+            for item in result.get("merged", []):
+                for headword in item.get("imported_headwords", []):
+                    actions.append({
+                        "headword": headword,
+                        "action": f"「{item.get('headword', '')}」へ追加",
+                        "entry_id": item.get("entry_id"),
+                    })
+            actions.extend({"headword": item.get("headword", ""), "action": "除外", "entry_id": None} for item in result.get("skipped", []))
+            actions.extend({"headword": item.get("headword", ""), "action": "処理できず", "detail": item.get("message", ""), "entry_id": None} for item in result.get("errors", []))
+        else:
+            label = {
+                "cancelled": "取込前に取消",
+                "failed": "取込失敗",
+            }.get(row["status"], "確認待ち")
+            actions = [
+                {"headword": item.get("headword", ""), "action": label, "entry_id": None}
+                for item in payload.get("entries", [])
+            ]
+        batches.append({
+            "row": row,
+            "payload": payload,
+            "result": result,
+            "actions": actions,
+            "source_name": result.get("source_name") or "指定なし（町側の記述）",
+            "source_visibility": result.get("source_shown_on_public") if result.get("source_name") else None,
+        })
+    return render_template(
+        "v2/research_import_history.html",
+        batches=batches,
         csrf_token=csrf_token(),
     )
 
@@ -173,6 +259,12 @@ def apply(batch_id):
         flash("この調査シートは処理済みです。")
         return redirect(url_for("research_import.preview", batch_id=batch_id))
 
+    try:
+        source_id, source = _selected_source(db)
+    except ResearchSheetError as error:
+        flash(str(error))
+        return redirect(url_for("research_import.preview", batch_id=batch_id))
+
     new_entries = []
     merge_groups = defaultdict(list)
     skipped = []
@@ -198,7 +290,7 @@ def apply(batch_id):
         try:
             combined = existing_snapshot_for_merge(db, target_id)
             for _index, imported in items:
-                combined = merge_imported_snapshot(combined, imported)
+                combined = merge_imported_for_source(combined, imported, source_id)
             prepared_merges.append((target_id, items, combined))
         except ResearchSheetError as error:
             for _index, imported in items:
@@ -217,6 +309,7 @@ def apply(batch_id):
     try:
         for _index, imported in new_entries:
             snapshot = _snapshot(imported)
+            snapshot["primary_source_id"] = source_id
             entry_id = db.execute("INSERT INTO entries(headword) VALUES(?)", (snapshot["headword"],)).lastrowid
             revision_id = db.execute(
                 "INSERT INTO entry_revisions(entry_id,author_id,snapshot_json,change_summary) "
@@ -230,7 +323,9 @@ def apply(batch_id):
             )
             created.append({"entry_id": entry_id, "headword": snapshot["headword"]})
             revisions.append((entry_id, revision_id, snapshot["headword"]))
-            _audit(db, "research_sheet_create_draft", "entry", entry_id, {"batch_id": batch_id})
+            _audit(db, "research_sheet_create_draft", "entry", entry_id, {
+                "batch_id": batch_id, "source_id": source_id,
+            })
 
         for target_id, items, snapshot in prepared_merges:
             revision_id = db.execute(
@@ -250,6 +345,7 @@ def apply(batch_id):
             revisions.append((target_id, revision_id, snapshot["headword"]))
             _audit(db, "research_sheet_merge_draft", "revision", revision_id, {
                 "batch_id": batch_id, "entry_id": target_id, "imported_headwords": imported_headwords,
+                "source_id": source_id,
             })
 
         requests = []
@@ -281,6 +377,9 @@ def apply(batch_id):
             "skipped": skipped,
             "errors": errors,
             "review_requests": requests,
+            "source_id": source_id,
+            "source_name": source["name"] if source else None,
+            "source_shown_on_public": bool(source["show_on_public"]) if source else False,
         }
         db.execute(
             "UPDATE import_batches SET status='applied',result_json=?,applied_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -289,6 +388,7 @@ def apply(batch_id):
         _audit(db, "research_sheet_import", "import_batch", batch_id, {
             "created": len(created), "merged": len(merged), "skipped": len(skipped),
             "errors": len(errors), "review_requests": len(requests),
+            "source_id": source_id, "source_name": source["name"] if source else None,
         })
         db.commit()
     except Exception:

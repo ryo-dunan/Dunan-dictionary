@@ -75,7 +75,7 @@ def meaning_cards(snapshot):
 
 def editor_reference_data(db, snapshot, entry_id=None):
     categories = db.execute("SELECT id,name FROM conjugation_categories WHERE is_active=1 ORDER BY sort_order,name").fetchall()
-    sources = db.execute("SELECT id,name,abbreviation,is_active FROM sources ORDER BY is_active DESC,name").fetchall()
+    sources = db.execute("SELECT id,name,abbreviation,is_active,show_on_public FROM sources ORDER BY is_active DESC,name").fetchall()
     media = db.execute("SELECT * FROM media_files WHERE entry_id=? AND example_id IS NULL ORDER BY created_at DESC", (entry_id,)).fetchall() if entry_id else []
     return {"conjugation_categories": categories, "sources": sources, "meaning_cards": meaning_cards(snapshot),
             "entry_media": media, "source_sections": snapshot.get("source_sections", [])}
