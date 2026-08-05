@@ -3,7 +3,7 @@
 {% block content %}
 <header class="topbar glass">
   <div><p class="eyebrow">完全管理者</p><h1>定期調査シートから追加</h1></div>
-  <a class="quiet link-button" href="{{ url_for('admin_v2.index') }}">運用管理へ戻る</a>
+  <div class="research-header-actions"><a class="quiet link-button" href="{{ url_for('research_import.history') }}">取込履歴</a><a class="quiet link-button" href="{{ url_for('admin_v2.index') }}">運用管理へ戻る</a></div>
 </header>
 
 {% for message in get_flashed_messages() %}<div class="notice page-notice">{{ message }}</div>{% endfor %}
@@ -36,7 +36,7 @@
 </section>
 {% if payload.warnings %}<section class="notice warning-list"><h2>ファイル全体の確認事項</h2>{% for warning in payload.warnings %}<p>{{ warning }}</p>{% endfor %}</section>{% endif %}
 
-<form method="post" action="{{ url_for('research_import.apply', batch_id=batch.id) }}" class="research-preview-form">
+<form method="post" action="{{ url_for('research_import.apply', batch_id=batch.id) }}" class="research-preview-form" data-manual-search-url="{{ url_for('research_import.search_targets') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <div class="research-entry-list">
   {% for item in entries %}
@@ -57,14 +57,18 @@
       <fieldset class="import-decision">
         <legend>この見出し語をどうするか</legend>
         <label class="decision-option"><input type="radio" name="action_{{ item.index }}" value="new"{% if item.default_action == 'new' %} checked{% endif %}> <span><strong>新しい見出し語として追加</strong><small>非公開の下書きを新規作成します。</small></span></label>
-        <label class="decision-option{% if not item.can_merge %} unavailable{% endif %}"><input type="radio" name="action_{{ item.index }}" value="merge"{% if item.default_action == 'merge' %} checked{% endif %}{% if not item.can_merge %} disabled{% endif %}> <span><strong>既存の見出し語へ内容を追加</strong><small>意味・例文・調査記録を、既存内容を消さずに下書きへ足します。</small></span></label>
-        {% if item.can_merge %}
-        <label class="candidate-select-label">追加先
-          <select name="target_{{ item.index }}">
+        <label class="decision-option{% if not item.can_merge %} unavailable{% endif %}" data-merge-label="{{ item.index }}"><input type="radio" name="action_{{ item.index }}" value="merge" data-merge-radio="{{ item.index }}"{% if item.default_action == 'merge' %} checked{% endif %}{% if not item.can_merge %} disabled{% endif %}> <span><strong>既存の見出し語へ内容を追加</strong><small>意味・例文・調査記録を、既存内容を消さずに下書きへ足します。</small></span></label>
+        <label class="candidate-select-label{% if not item.can_merge %} is-hidden{% endif %}" data-target-label="{{ item.index }}">追加先
+          <select name="target_{{ item.index }}" data-target-select="{{ item.index }}">
             {% for candidate in item.candidates %}<option value="{{ candidate.id }}"{% if candidate.id == item.default_target %} selected{% endif %}{% if candidate.merge_blocked %} disabled{% endif %}>{{ candidate.headword }}{% if candidate.kana %}（{{ candidate.kana }}）{% endif %} — {{ candidate.reasons|join('・') }}{% if candidate.merge_blocked %} / 作業中のため選択不可{% endif %}</option>{% endfor %}
           </select>
         </label>
-        {% endif %}
+        <section class="manual-target-search">
+          <label for="manual-query-{{ item.index }}">候補にない見出し語を手動で探す</label>
+          <div class="manual-target-controls"><input id="manual-query-{{ item.index }}" type="search" data-manual-query="{{ item.index }}" placeholder="見出し語・読み・IPA・日本語の意味"><button type="button" class="quiet" data-manual-search="{{ item.index }}">辞書内を検索</button></div>
+          <p class="help">自動候補に出なくても、辞書全体から検索して合併先に指定できます。</p>
+          <div class="manual-target-results" data-manual-results="{{ item.index }}" role="status" aria-live="polite"></div>
+        </section>
         <label class="decision-option"><input type="radio" name="action_{{ item.index }}" value="skip"> <span><strong>今回は取り込まない</strong><small>この見出し語だけ何も変更しません。</small></span></label>
       </fieldset>
 
@@ -89,7 +93,15 @@
   </div>
 
   <section class="batch-review-card glass">
-    <div><p class="eyebrow">最後の設定</p><h2>取り込んだ項目を一括で精査依頼</h2><p class="help">依頼しない場合は管理者の下書きとして残ります。「均等に依頼」では、現在の確認待ち件数が少ない人から順に自動配分します。</p></div>
+    <div><p class="eyebrow">最後の設定</p><h2>全項目の出典を一括指定</h2><p class="help">ここで選んだ出典を、今回取り込むすべての新規語・追加内容に適用します。既存語へ追加する場合は、町側の記述に混ぜず、その辞典の独立した記述として追加します。</p></div>
+    <label>今回の出典
+      <select name="source_id">
+        <option value="">指定なし（町の辞典・町の調査として扱う）</option>
+        {% for source in sources %}<option value="{{ source.id }}">{{ source.name }}{% if source.abbreviation %}（{{ source.abbreviation }}）{% endif %}／{{ '公開画面に出典表示' if source.show_on_public else '出典名は非表示・データのみ分離' }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="batch-setting-divider"></div>
+    <div><h2>取り込んだ項目を一括で精査依頼</h2><p class="help">依頼しない場合は管理者の下書きとして残ります。「均等に依頼」では、現在の確認待ち件数が少ない人から順に自動配分します。</p></div>
     <label>精査の依頼先
       <select name="reviewer_mode">
         <option value="none">今は依頼しない（下書きにする）</option>
@@ -108,6 +120,7 @@
 <section class="form-card glass import-result">
   <p class="eyebrow">処理完了</p><h1>{{ batch.original_filename }}</h1>
   {% if result %}
+  <p class="result-source"><strong>一括指定した出典：</strong>{{ result.source_name or '指定なし（町側の記述）' }}{% if result.source_name %} ／ {{ '公開画面に出典表示' if result.source_shown_on_public else '出典名は非表示' }}{% endif %}</p>
   <div class="result-counts">
     <span>新規 <strong>{{ result.created|length }}</strong></span>
     <span>既存へ追加 <strong>{{ result.merged|length }}</strong></span>
@@ -119,7 +132,7 @@
   {% if result.review_requests %}<h2>送信した精査依頼</h2><ul>{% for item in result.review_requests %}<li>{{ item.headword }} → {{ item.reviewer_name }}さん</li>{% endfor %}</ul>{% endif %}
   {% if result.errors %}<div class="entry-warnings"><h2>処理できなかった項目</h2>{% for item in result.errors %}<p>{{ item.headword }}: {{ item.message }}</p>{% endfor %}</div>{% endif %}
   {% endif %}
-  <div class="result-actions"><a class="primary link-button" href="{{ url_for('research_import.upload') }}">次の調査シートを取り込む</a><a class="quiet link-button" href="{{ url_for('editorial.tasks') }}">精査・下書きを確認</a></div>
+  <div class="result-actions"><a class="primary link-button" href="{{ url_for('research_import.upload') }}">次の調査シートを取り込む</a><a class="quiet link-button" href="{{ url_for('research_import.history') }}">取込履歴を見る</a><a class="quiet link-button" href="{{ url_for('editorial.tasks') }}">精査・下書きを確認</a></div>
 </section>
 {% else %}
 <section class="form-card glass import-result"><p class="eyebrow">取込取消済み</p><h1>{{ batch.original_filename }}</h1><p>この取込では辞書データを変更していません。</p><a class="primary link-button" href="{{ url_for('research_import.upload') }}">別の調査シートを取り込む</a></section>

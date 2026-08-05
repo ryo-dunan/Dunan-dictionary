@@ -8,6 +8,12 @@
   {% for item in media if item.file_type=='audio' %}<audio controls src="{{ url_for('public.media',filename=item.file_path) }}"></audio>{% endfor %}
 </article>
 {% if fallback %}<p class="fallback-note">{{ ui.fallback }}</p>{% endif %}
+{% if primary_source %}
+<section class="primary-source-banner glass">
+  <div><p class="eyebrow">{{ ui.source }}</p><strong>{{ primary_source.name }}{% if primary_source.abbreviation %}（{{ primary_source.abbreviation }}）{% endif %}</strong>{% if primary_source.bibliography %}<small>{{ primary_source.bibliography }}</small>{% endif %}</div>
+  {% if primary_source.safe_url %}<a href="{{ primary_source.safe_url }}" rel="noopener noreferrer">{{ ui.source_link }}</a>{% endif %}
+</section>
+{% endif %}
 
 <div class="entry-layout">
   <div class="entry-main">
@@ -28,8 +34,8 @@
     <section class="content-card glass"><h2>{{ ui.examples }}</h2>{% for ex in examples %}<article class="public-example"><div><strong>{{ ex.sentence }}</strong>{% if ex.audio %}<audio controls src="{{ url_for('public.media',filename=ex.audio) }}"></audio>{% endif %}</div>{% if ex.translation %}<p class="word-by-word">{{ ex.translation.word_by_word or '' }}</p><p>{{ ex.translation.free_translation or '' }}</p>{% else %}<p class="translation-missing">{{ ui.translation_missing }}</p>{% endif %}</article>{% endfor %}</section>
     {% endif %}
 
-    {% if entry.etymology or entry.historical_change or entry.supplemental_note %}
-    <section class="content-card glass"><h2>{{ ui.supplemental }}</h2>{% if entry.etymology %}<p><strong>{{ ui.etymology }}</strong><br>{{ entry.etymology }}</p>{% endif %}{% if entry.historical_change %}<p><strong>{{ ui.historical_change }}</strong><br>{{ entry.historical_change }}</p>{% endif %}{% if entry.supplemental_note %}<p><strong>{{ ui.free_note }}</strong><br>{{ entry.supplemental_note }}</p>{% endif %}</section>
+    {% if entry.etymology or entry.historical_change or entry.supplemental_note or hidden_source_supplemental %}
+    <section class="content-card glass"><h2>{{ ui.supplemental }}</h2>{% if entry.etymology %}<p><strong>{{ ui.etymology }}</strong><br>{{ entry.etymology }}</p>{% endif %}{% if entry.historical_change %}<p><strong>{{ ui.historical_change }}</strong><br>{{ entry.historical_change }}</p>{% endif %}{% if entry.supplemental_note %}<p><strong>{{ ui.free_note }}</strong><br>{{ entry.supplemental_note }}</p>{% endif %}{% for item in hidden_source_supplemental %}{% if item.etymology %}<p><strong>{{ ui.etymology }}</strong><br>{{ item.etymology }}</p>{% endif %}{% if item.historical_change %}<p><strong>{{ ui.historical_change }}</strong><br>{{ item.historical_change }}</p>{% endif %}{% if item.note %}<p><strong>{{ ui.free_note }}</strong><br>{{ item.note }}</p>{% endif %}{% endfor %}</section>
     {% endif %}
 
     {% if media|selectattr('file_type','equalto','image')|list %}

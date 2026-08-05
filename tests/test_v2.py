@@ -13,7 +13,7 @@ from werkzeug.datastructures import MultiDict
 from v2app import create_app
 from scripts.upgrade_v2 import apply_upgrades
 from v2app.search import normalize, rebuild_search_index, search_entries
-from v2app.research_sheet import parse_research_workbook
+from v2app.research_sheet import merge_imported_for_source, parse_research_workbook
 from v2app.workflow import snapshot_from_form
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -243,11 +243,35 @@ class V2AppTest(unittest.TestCase):
         self.assertEqual(parsed["entries"][1]["pos"], "連語")
         self.assertEqual(parsed["entries"][1]["meanings"]["ja"], ["急に゜"])
 
+    def test_repeated_import_appends_to_the_same_dictionary_section(self):
+        base = {
+            "headword": "統合語", "meanings": {"ja": ["町の意味"]}, "examples": [],
+            "source_sections": [{
+                "source_id": 7, "source_headword": "統合語", "locator": "",
+                "meanings": {"ja": ["以前の辞典記述"]}, "synonyms": [], "conjugations": [],
+                "examples": [], "etymology": "", "historical_change": "", "note": "", "legacy_record_ids": [],
+            }],
+            "primary_source_id": None,
+        }
+        imported = {
+            "headword": "統合語", "pos": "名詞", "meanings": {"ja": ["今回の辞典記述"]},
+            "examples": [{"yonaguni": "辞典例文", "translations": {"ja": {"word_by_word": "", "free_translation": "訳"}}}],
+            "supplemental_note": "月例調査",
+        }
+        merged = merge_imported_for_source(base, imported, 7)
+        self.assertEqual(merged["meanings"]["ja"], ["町の意味"])
+        self.assertEqual(merged["source_sections"][0]["meanings"]["ja"], ["以前の辞典記述", "今回の辞典記述"])
+        self.assertEqual(merged["source_sections"][0]["examples"][0]["yonaguni"], "辞典例文")
+        self.assertEqual(merged["source_sections"][0]["note"], "月例調査")
+
     def test_research_sheet_import_can_merge_create_and_send_batch_review(self):
         self.login()
         with sqlite3.connect(self.database) as db:
             admin_id = db.execute("SELECT id FROM users WHERE username='admin'").fetchone()[0]
             reviewer_id = db.execute("SELECT id FROM users WHERE username='reviewer'").fetchone()[0]
+            source_id = db.execute(
+                "INSERT INTO sources(name,abbreviation,bibliography) VALUES('zz調査辞典','zz調査','調査辞典の書誌') RETURNING id"
+            ).fetchone()[0]
             existing_id = db.execute(
                 "INSERT INTO entries(headword,pos) VALUES('zz調査','名詞') RETURNING id"
             ).fetchone()[0]
@@ -287,6 +311,7 @@ class V2AppTest(unittest.TestCase):
                 "action_0": "merge",
                 "target_0": str(existing_id),
                 "action_1": "new",
+                "source_id": str(source_id),
                 "reviewer_mode": str(reviewer_id),
             },
         )
@@ -306,9 +331,16 @@ class V2AppTest(unittest.TestCase):
                 (existing_id,),
             ).fetchone()
             merged_snapshot = json.loads(merge_revision[0])
-            self.assertEqual(merged_snapshot["meanings"]["ja"], ["既存の意味", "追加する意味"])
+            self.assertEqual(merged_snapshot["meanings"]["ja"], ["既存の意味"])
+            self.assertEqual(merged_snapshot["source_sections"][0]["source_id"], source_id)
+            self.assertEqual(merged_snapshot["source_sections"][0]["meanings"]["ja"], ["追加する意味"])
+            self.assertEqual(merged_snapshot["source_sections"][0]["examples"][0]["yonaguni"], "zz例文")
             self.assertEqual(merge_revision[1], "review_requested")
             new_entry = db.execute("SELECT id FROM entries WHERE headword='zz新語' ORDER BY id DESC LIMIT 1").fetchone()
+            new_revision = json.loads(db.execute(
+                "SELECT snapshot_json FROM entry_revisions WHERE entry_id=? ORDER BY id DESC LIMIT 1", new_entry
+            ).fetchone()[0])
+            self.assertEqual(new_revision["primary_source_id"], source_id)
             new_state = db.execute(
                 "SELECT publication_status,workflow_status FROM entry_workflow WHERE entry_id=?", new_entry
             ).fetchone()
@@ -326,6 +358,107 @@ class V2AppTest(unittest.TestCase):
             self.assertEqual(len(result["created"]), 1)
             self.assertEqual(len(result["merged"]), 1)
             self.assertEqual(len(result["review_requests"]), 2)
+            self.assertEqual(result["source_id"], source_id)
+            self.assertEqual(result["source_name"], "zz調査辞典")
+        history = self.client.get("/v2/admin-tools/research-sheet/history")
+        self.assertEqual(history.status_code, 200)
+        self.assertIn("weekly.xlsx".encode(), history.data)
+        self.assertIn("zz調査辞典".encode(), history.data)
+        self.assertIn("zz調査".encode(), history.data)
+
+    def test_research_sheet_manual_merge_target_searches_headword_and_meaning(self):
+        self.login()
+        with sqlite3.connect(self.database) as db:
+            admin_id = db.execute("SELECT id FROM users WHERE username='admin'").fetchone()[0]
+            entry_id = db.execute(
+                "INSERT INTO entries(headword,kana,ipa,pos) VALUES('zz手動合併先','てどう','tedou','名詞') RETURNING id"
+            ).fetchone()[0]
+            db.execute(
+                "INSERT INTO meanings(entry_id,language,meaning_number,definition) VALUES(?,'ja',1,'特別な手動検索の意味')",
+                (entry_id,),
+            )
+            db.execute(
+                "INSERT INTO entry_workflow(entry_id,publication_status,workflow_status,created_by) VALUES(?,'published','verified',?)",
+                (entry_id, admin_id),
+            )
+            db.commit()
+        response = self.client.get("/v2/admin-tools/research-sheet/search-targets?q=特別な手動検索")
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()["results"]
+        self.assertEqual(result[0]["id"], entry_id)
+        self.assertIn("意味", result[0]["matched_fields"])
+        response = self.client.get("/v2/admin-tools/research-sheet/search-targets?q=zz手動")
+        self.assertEqual(response.get_json()["results"][0]["id"], entry_id)
+
+    def test_public_entry_labels_primary_dictionary_source(self):
+        with sqlite3.connect(self.database) as db:
+            admin_id = db.execute("SELECT id FROM users WHERE username='admin'").fetchone()[0]
+            entry_id = db.execute("INSERT INTO entries(headword,pos) VALUES('zz公開語','名詞') RETURNING id").fetchone()[0]
+            db.execute(
+                "INSERT INTO entry_workflow(entry_id,publication_status,workflow_status,created_by) VALUES(?,'published','verified',?)",
+                (entry_id, admin_id),
+            )
+            source_id = db.execute(
+                "INSERT INTO sources(name,abbreviation,bibliography,url) VALUES('zz公開出典','公開','公開書誌','https://example.test/source') RETURNING id"
+            ).fetchone()[0]
+            db.execute(
+                "INSERT INTO entry_primary_sources(entry_id,source_id) VALUES(?,?) ON CONFLICT(entry_id) DO UPDATE SET source_id=excluded.source_id",
+                (entry_id, source_id),
+            )
+            db.commit()
+        response = self.client.get(f"/word/{entry_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("zz公開出典".encode(), response.data)
+        self.assertIn("公開書誌".encode(), response.data)
+
+    def test_hidden_town_source_stays_separate_but_reads_as_regular_content(self):
+        with sqlite3.connect(self.database) as db:
+            admin_id = db.execute("SELECT id FROM users WHERE username='admin'").fetchone()[0]
+            entry_id = db.execute("INSERT INTO entries(headword,pos) VALUES('zz例会語','名詞') RETURNING id").fetchone()[0]
+            db.execute(
+                "INSERT INTO meanings(entry_id,language,meaning_number,definition) VALUES(?,'ja',1,'既存の町辞典の意味')",
+                (entry_id,),
+            )
+            db.execute(
+                "INSERT INTO entry_workflow(entry_id,publication_status,workflow_status,created_by) VALUES(?,'published','verified',?)",
+                (entry_id, admin_id),
+            )
+            source_id = db.execute(
+                "INSERT INTO sources(name,bibliography,show_on_public) VALUES('zz町例会2026','町例会内部記録',0) RETURNING id"
+            ).fetchone()[0]
+            content = {
+                "source_headword": "zz例会語", "locator": "第3回", "meanings": {"ja": ["例会で追加した意味"]},
+                "synonyms": ["例会同義語"], "conjugations": [{"form": "基本形", "conjugated": "例会形"}],
+                "examples": [{"yonaguni": "例会ぬ例文", "translations": {"ja": {"word_by_word": "", "free_translation": "例会の訳"}}}],
+                "etymology": "", "historical_change": "", "note": "例会で確認した補足",
+            }
+            db.execute(
+                "INSERT INTO entry_source_sections(entry_id,source_id,sort_order,content_json) VALUES(?,?,1,?)",
+                (entry_id, source_id, json.dumps(content, ensure_ascii=False)),
+            )
+            db.commit()
+        response = self.client.get(f"/word/{entry_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("zz町例会2026".encode(), response.data)
+        self.assertNotIn("町例会内部記録".encode(), response.data)
+        self.assertIn("既存の町辞典の意味".encode(), response.data)
+        self.assertIn("例会で追加した意味".encode(), response.data)
+        self.assertIn("例会ぬ例文".encode(), response.data)
+        self.assertIn("例会形".encode(), response.data)
+        self.assertIn("例会で確認した補足".encode(), response.data)
+
+    def test_source_manager_can_mark_a_source_as_internal_only(self):
+        self.login()
+        response = self.client.post("/v2/sources", data={
+            "csrf_token": self.csrf(), "name": "zz内部例会", "bibliography": "内部の完全情報",
+            "source_type": "例会", "show_on_public": "0",
+        })
+        self.assertEqual(response.status_code, 302)
+        with sqlite3.connect(self.database) as db:
+            row = db.execute("SELECT show_on_public FROM sources WHERE name='zz内部例会'").fetchone()
+        self.assertEqual(row, (0,))
+        page = self.client.get("/v2/sources")
+        self.assertIn("出典名は非表示（町側データ）".encode(), page.data)
 
     def test_approved_entry_is_publicly_searchable(self):
         entry_id = self.create_draft()

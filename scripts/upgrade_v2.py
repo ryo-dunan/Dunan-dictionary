@@ -27,6 +27,7 @@ def apply_upgrades(db):
     add_column(db, "media_files", "is_pending INTEGER NOT NULL DEFAULT 0")
     add_column(db, "entry_source_records", "is_archived INTEGER NOT NULL DEFAULT 0")
     add_column(db, "entries", "supplemental_note TEXT")
+    add_column(db, "sources", "show_on_public INTEGER NOT NULL DEFAULT 1")
     db.execute("UPDATE entry_workflow SET publication_status='published' WHERE created_by IS NULL AND workflow_status='unreviewed' AND publication_status='unpublished'")
     db.execute("INSERT OR IGNORE INTO example_state(example_id) SELECT id FROM examples")
     default_categories = ("基本形", "未然形", "連用形", "終止形", "連体形", "仮定形", "命令形", "否定形", "過去形", "テ形", "条件形", "意向形", "可能形", "受身形", "使役形")

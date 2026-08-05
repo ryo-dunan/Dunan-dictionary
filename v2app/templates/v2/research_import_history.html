@@ -1,0 +1,52 @@
+{% extends "v2/base.html" %}
+{% block title %}定期調査シート取込履歴{% endblock %}
+{% block content %}
+<header class="topbar glass">
+  <div><p class="eyebrow">完全管理者</p><h1>定期調査シート取込履歴</h1><p class="help">いつ、誰が、どのファイルから、どの語を取り込んだか確認できます。</p></div>
+  <div class="research-header-actions"><a class="primary link-button" href="{{ url_for('research_import.upload') }}">新しいシートを取り込む</a><a class="quiet link-button" href="{{ url_for('admin_v2.index') }}">運用管理へ戻る</a></div>
+</header>
+
+{% if batches %}
+<div class="research-history-list">
+  {% for batch in batches %}
+  {% set row = batch.row %}
+  {% set result = batch.result %}
+  <article class="research-history-card glass">
+    <div class="research-history-heading">
+      <div><p class="eyebrow">取込 #{{ row.id }}</p><h2>{{ row.original_filename }}</h2></div>
+      <span class="status-pill">{% if row.status == 'applied' %}取込済み{% elif row.status == 'cancelled' %}取消済み{% elif row.status == 'failed' %}取込失敗{% else %}確認待ち{% endif %}</span>
+    </div>
+    <div class="research-history-meta">
+      <span>登録：{{ row.created_at }}</span>
+      {% if row.applied_at %}<span>実行：{{ row.applied_at }}</span>{% endif %}
+      <span>操作：{{ row.display_name }}</span>
+      <span>シート：{{ batch.payload.sheet_name }}</span>
+      <span>出典：{{ batch.source_name }}{% if batch.source_visibility is not none %}（{{ '公開表示' if batch.source_visibility else '出典名は非表示' }}）{% endif %}</span>
+    </div>
+    {% if row.status == 'applied' %}
+    <div class="research-history-counts">
+      <span>新規 {{ result.get('created', [])|length }}語</span>
+      <span>既存へ追加 {{ result.get('merged', [])|length }}件</span>
+      <span>除外 {{ result.get('skipped', [])|length }}語</span>
+      {% if result.get('errors') %}<span>処理できず {{ result.errors|length }}語</span>{% endif %}
+    </div>
+    {% else %}
+    <div class="research-history-counts"><span>{{ batch.payload.entries|length }}語</span></div>
+    {% endif %}
+    <details class="research-history-words">
+      <summary>対象になった語と操作を見る（{{ batch.actions|length }}語）</summary>
+      <div class="research-history-table-wrap">
+        <table class="research-history-table">
+          <thead><tr><th>見出し語</th><th>操作</th><th>詳細</th></tr></thead>
+          <tbody>{% for item in batch.actions %}<tr><td>{% if item.entry_id %}<a href="{{ url_for('editorial.edit_entry', entry_id=item.entry_id) }}">{{ item.headword }}</a>{% else %}{{ item.headword }}{% endif %}</td><td>{{ item.action }}</td><td>{{ item.detail or '' }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </details>
+    <p><a href="{{ url_for('research_import.preview', batch_id=row.id) }}">この取込の詳細画面を開く</a></p>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<section class="research-history-empty glass"><h2>取込履歴はまだありません</h2><p>定期調査シートを取り込むと、ここにファイル名・日時・対象語が記録されます。</p><a class="primary link-button" href="{{ url_for('research_import.upload') }}">最初のシートを取り込む</a></section>
+{% endif %}
+{% endblock %}

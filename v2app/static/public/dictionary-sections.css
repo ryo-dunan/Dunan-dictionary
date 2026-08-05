@@ -1,3 +1,17 @@
+.primary-source-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin: 16px 0;
+  padding: 17px 21px;
+  border-left: 4px solid rgba(181, 106, 23, .55);
+  background: rgba(244, 223, 183, .28);
+}
+.primary-source-banner > div { display: grid; gap: 3px; }
+.primary-source-banner .eyebrow { margin: 0; }
+.primary-source-banner small { color: var(--muted); }
+.primary-source-banner a { color: var(--ocean); white-space: nowrap; }
 .dictionary-continuation {
   overflow: hidden;
   border-radius: 23px;
@@ -20,3 +34,8 @@
   text-align: left;
 }
 .dictionary-continuation-body > footer a { color: var(--ocean); }
+
+@media (max-width: 680px) {
+  .primary-source-banner { display: grid; }
+  .primary-source-banner a { white-space: normal; }
+}

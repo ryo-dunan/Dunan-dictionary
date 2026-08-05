@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS sources (
     bibliography TEXT NOT NULL,
     url TEXT,
     source_type TEXT,
+    show_on_public INTEGER NOT NULL DEFAULT 1 CHECK (show_on_public IN (0, 1)),
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

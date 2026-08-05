@@ -73,14 +73,28 @@ def entry(entry_id, slug=None):
     meanings=db.execute("SELECT meaning_number,definition FROM meanings WHERE entry_id=? AND language=? AND TRIM(COALESCE(definition,''))!='' ORDER BY meaning_number",(entry_id,display)).fetchall()
     fallback=False
     if not meanings and display!="ja": meanings=db.execute("SELECT meaning_number,definition FROM meanings WHERE entry_id=? AND language='ja' AND TRIM(COALESCE(definition,''))!='' ORDER BY meaning_number",(entry_id,)).fetchall(); fallback=True
+    primary_source_row = db.execute(
+        "SELECT s.name,s.abbreviation,s.bibliography,s.url,s.show_on_public FROM entry_primary_sources ps "
+        "JOIN sources s ON s.id=ps.source_id WHERE ps.entry_id=?",
+        (entry_id,),
+    ).fetchone()
+    primary_source = dict(primary_source_row) if primary_source_row else None
+    if primary_source:
+        primary_source["safe_url"] = primary_source["url"] if (primary_source["url"] or "").startswith(("https://", "http://")) else None
+        if not primary_source["show_on_public"]:
+            primary_source = None
     examples=[]
     for ex in db.execute("SELECT ex.* FROM examples ex LEFT JOIN example_state es ON es.example_id=ex.id WHERE ex.entry_id=? AND COALESCE(es.is_archived,0)=0 ORDER BY ex.id",(entry_id,)):
         trans=db.execute("SELECT word_by_word,free_translation FROM example_translations WHERE example_id=? AND language=? ORDER BY id LIMIT 1",(ex["id"],display)).fetchone()
         if not trans and display!="ja": trans=db.execute("SELECT word_by_word,free_translation FROM example_translations WHERE example_id=? AND language='ja' ORDER BY id LIMIT 1",(ex["id"],)).fetchone()
         audio=db.execute("SELECT file_path FROM media_files WHERE example_id=? AND file_type='audio' AND COALESCE(is_archived,0)=0 AND COALESCE(is_pending,0)=0 ORDER BY id DESC LIMIT 1",(ex["id"],)).fetchone()
         examples.append({"sentence":ex["yonaguni_sentence"],"translation":trans,"audio":audio[0] if audio else None})
+    media=db.execute("SELECT file_type,file_path,description FROM media_files WHERE entry_id=? AND example_id IS NULL AND COALESCE(is_archived,0)=0 AND COALESCE(is_pending,0)=0",(entry_id,)).fetchall()
+    conjugations=[dict(row) for row in db.execute("SELECT form_name,conjugated_form FROM conjugations WHERE entry_id=?",(entry_id,)).fetchall()]
+    synonyms=[dict(row) for row in db.execute("SELECT synonym FROM synonyms WHERE entry_id=?",(entry_id,)).fetchall()]
+    hidden_source_supplemental=[]
     source_sections=[]
-    for section_row in db.execute("SELECT ss.content_json,s.name,s.abbreviation,s.bibliography,s.url FROM entry_source_sections ss JOIN sources s ON s.id=ss.source_id WHERE ss.entry_id=? ORDER BY ss.sort_order,ss.id",(entry_id,)):
+    for section_row in db.execute("SELECT ss.content_json,s.name,s.abbreviation,s.bibliography,s.url,s.show_on_public FROM entry_source_sections ss JOIN sources s ON s.id=ss.source_id WHERE ss.entry_id=? ORDER BY ss.sort_order,ss.id",(entry_id,)):
         content=json.loads(section_row["content_json"]); section=dict(section_row)
         section.update(content)
         section_meanings=content.get("meanings",{}).get(display)
@@ -96,12 +110,38 @@ def entry(entry_id, slug=None):
             section_examples.append({"sentence":example.get("yonaguni",""),"translation":translation})
         section["display_examples"]=section_examples
         section["safe_url"] = section["url"] if (section["url"] or "").startswith(("https://", "http://")) else None
+        if not section["show_on_public"]:
+            known_meanings = {item["definition"] for item in meanings}
+            for value in section["display_meanings"]:
+                if value and value not in known_meanings:
+                    meanings.append({"meaning_number": len(meanings) + 1, "definition": value})
+                    known_meanings.add(value)
+            known_examples = {item["sentence"] for item in examples}
+            for item in section["display_examples"]:
+                if item["sentence"] and item["sentence"] not in known_examples:
+                    examples.append(item)
+                    known_examples.add(item["sentence"])
+            known_conjugations = {(item["form_name"], item["conjugated_form"]) for item in conjugations}
+            for item in content.get("conjugations", []):
+                pair = (item.get("form", ""), item.get("conjugated", ""))
+                if any(pair) and pair not in known_conjugations:
+                    conjugations.append({"form_name": pair[0], "conjugated_form": pair[1]})
+                    known_conjugations.add(pair)
+            known_synonyms = {item["synonym"] for item in synonyms}
+            for value in content.get("synonyms", []):
+                if value and value not in known_synonyms:
+                    synonyms.append({"synonym": value})
+                    known_synonyms.add(value)
+            if any(content.get(field) for field in ("etymology", "historical_change", "note")):
+                hidden_source_supplemental.append({
+                    "etymology": content.get("etymology", ""),
+                    "historical_change": content.get("historical_change", ""),
+                    "note": content.get("note", ""),
+                })
+            continue
         source_sections.append(section)
-    media=db.execute("SELECT file_type,file_path,description FROM media_files WHERE entry_id=? AND example_id IS NULL AND COALESCE(is_archived,0)=0 AND COALESCE(is_pending,0)=0",(entry_id,)).fetchall()
-    conjugations=db.execute("SELECT form_name,conjugated_form FROM conjugations WHERE entry_id=?",(entry_id,)).fetchall()
-    synonyms=db.execute("SELECT synonym FROM synonyms WHERE entry_id=?",(entry_id,)).fetchall()
     has_default_meanings=bool(meanings or synonyms)
-    return render_template("public/entry.html",entry=row,meanings=meanings,examples=examples,source_sections=source_sections,has_default_meanings=has_default_meanings,media=media,conjugations=conjugations,synonyms=synonyms,language=language,fallback=fallback,back_url=back_url,ui=public_ui(language),language_urls=language_urls())
+    return render_template("public/entry.html",entry=row,meanings=meanings,examples=examples,primary_source=primary_source,source_sections=source_sections,hidden_source_supplemental=hidden_source_supplemental,has_default_meanings=has_default_meanings,media=media,conjugations=conjugations,synonyms=synonyms,language=language,fallback=fallback,back_url=back_url,ui=public_ui(language),language_urls=language_urls())
 
 
 @bp.get("/media/<path:filename>")
